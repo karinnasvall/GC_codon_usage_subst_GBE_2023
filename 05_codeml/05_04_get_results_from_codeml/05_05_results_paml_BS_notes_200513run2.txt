@@ -1,0 +1,215 @@
+#modified 200513
+################ Result Branch site test ####################
+#extract results from paml codeml branch site test for foreground branch under selection
+#tree length, proportion and foreground branch dnds, kappa, alignment length, gaps, gc content, lnl, calc LRT and FDR
+#after each stepp look at the outputfile (less) and count the lines (wc -l)
+#make a directory called summary in the output directory, next to ../estOmega/ and ../fixOmega/
+
+RESULTPATH=/path/to/your/codeml_result/
+
+cd /RESULTPATH/summary/
+#cd ../outputs/paml_BS_trimmed_200421/summary/
+
+#### Extract the easy results ######
+#get simple results that are easy to get from one line, (ie they dont need diff pruning to get into a table)
+#the order of the variables will be in order of appearance in .mlc file, the file will be in one column
+
+grep -E "tree length|kappa|proportion|foreground w" ../estOmega/*est.mlc | cut -f 3,4 -d "/" | sed 's/proportion   /proportion =/g'  | sed 's/foreground w  /foreground w =/g' > summary_BS_partial.txt
+
+wc -l summary_BS_partial.txt
+#19468 (/4 = 4867)
+
+
+#get a table with each sample on one line instead of everything in one column
+cut -d "=" -f 2- summary_BS_partial.txt | awk 'ORS=NR%4?" ":"\n"' > summary_BS_partial.table
+head summary_BS_partial.table
+wc -l summary_BS_partial.table
+#4867
+
+#get the genenames in order each sample one one line
+cut -f 1 -d ":" summary_BS_partial.txt | uniq | cut -f 1,2 -d "." > list_genenames_order_BS_output.table
+head list_genenames_order_BS_output.table
+wc -l list_genenames_order_BS_output.table
+#4867
+
+#### Alignment length ############
+
+#for file in $(cat ../../../working/list_trimmed_filenames.txt);do head -n 1 $file | cut -f 3 -d ' '; done > alignment_length.txt
+#alt get the alignment from the trimal-filetering list
+awk '{print $1, $3}' summary_trimmed_200421_filtered2_length.table | sed 's/.fasta.out.best_trimmed.html://g' > ../paml_BS_trimmed_200421/summary/Trimmed_alignment_length_200513.table
+less Trimmed_alignment_length_200513.table
+
+#get total nr of gaps (tr -cd : delete everything not matching the pattern) and divide by nr of seq (8)
+for file in $(cat ../../../working/list_trimmed_filenames200524.txt);do tr -cd "-" < $file | wc -c; done > alignment_length_totalgaps.txt
+paste Trimmed_alignment_length_200513.table ../../trimal/alignment_length_totalgaps.txt > Trimmed_alignment_length_200513_gaps.table
+
+#check how many nr of gaps longer then the alignment
+awk '{print $0, $3/8, $3/$2}' Trimmed_alignment_length_200513_gaps.table | awk '$3>$2{print $0}' | wc -l
+
+awk '{print $0, ($1/8)}' alignment_length_totalgaps.txt | paste alignment_length.txt - > alignment_length_sum.table
+
+#get ratio gaps per site and add column
+#done in r
+#result_sign.df$gaps_site <- (result_sign.df$gaps_al/result_sign.df$al_length)
+#result_nonsign.df$gaps_site <- (result_nonsign.df$gaps_al/result_nonsign.df$al_length)
+#result_BS.df$gaps_site <- (result_BS.df$gaps_al/result_BS.df$al_length)
+
+
+#### GC-content ##################
+#get GC-content all positions
+grep -A 5 "overall" ../estOmega/*.mlc > Summary_gc_average_unfiltered.txt
+grep ": L_sinapis" -A 4 ../estOmega/*.mlc > Summary_gc_leptidea_unfiltered.txt
+
+#make a table
+grep -A 5 "overall" ../estOmega/*.mlc | grep "Average" | tr  ":" " " | awk '{print $4, $5, $8, $9, ($5+$9)}' > summary_gc_all.txt
+grep ": L_sinapis" -A 4 ../estOmega/*.mlc | grep "Average" | tr  ":" " " | awk '{print $4, $5, $8, $9, ($5+$9)}' > summary_gc_leptidea.txt
+head
+wc -l 4867
+# make one column with only gc-content
+#cut -f 5 -d " " summary_gc_all.txt > summary_gc_all.table
+#or
+awk '{print $5}' summary_gc_all.txt > summary_gc_all.table
+
+#cut -f 5 -d " " summary_gc_leptidea.txt > summary_gc_leptidea.table
+head
+wc -l 4867
+
+#get gc content per position
+#../estOmega/NM_001043315.1.fasta.out.best_trimmed_BS_est.mlc-position  3:    T:0.20120    C:0.33333    A:0.20420    G:0.26126
+
+grep -A 2 --no-group-separator "position  1" Summary_gc_average_unfiltered.txt | cut -f 3 -d "/" | sed 's/.fasta/-/g' | cut -f 1,3- -d "-" | tr ":" " " | awk '{print $0, $6+$10}' > Summary_gc_all_positions.txt
+sed 's/-position//g' Summary_gc_all_positions.txt | awk '{print $1, $2, $11}' > Summary_gc_all_positions.table
+
+#from all branches
+grep -A 4 "D_plexippus" ../estOmega/*.mlc | grep -A 2 --no-group-separator "position  1" | cut -f 3 -d "/" | sed 's/.fasta/-/g' | cut -f 1,3- -d "-" | tr ":" " " | awk '{print $0, $6+$10}' > Summary_gc_danaus_positions.txt
+grep -A 4 "L_accius" ../estOmega/*.mlc | grep -A 2 --no-group-separator "position  1" | cut -f 3 -d "/" | sed 's/.fasta/-/g' | cut -f 1,3- -d "-" | tr ":" " " | awk '{print $0, $6+$10}' > Summary_gc_larema_positions.txt
+grep -A 4 "L_sinapis" ../estOmega/*.mlc | grep -A 2 --no-group-separator "position  1" | cut -f 3 -d "/" | sed 's/.fasta/-/g' | cut -f 1,3- -d "-" | tr ":" " " | awk '{print $0, $6+$10}' > Summary_gc_leptidea_positions.txt
+grep -A 4 "H_melpomene" ../estOmega/*.mlc | grep -A 2 --no-group-separator "position  1" | cut -f 3 -d "/" | sed 's/.fasta/-/g' | cut -f 1,3- -d "-" | tr ":" " " | awk '{print $0, $6+$10}' > Summary_gc_heliconius_positions.txt
+grep -A 4 "P_machaon" ../estOmega/*.mlc | grep -A 2 --no-group-separator "position  1" | cut -f 3 -d "/" | sed 's/.fasta/-/g' | cut -f 1,3- -d "-" | tr ":" " " | awk '{print $0, $6+$10}' > Summary_gc_papilio_positions.txt
+grep -A 4 "B_mori" ../estOmega/*.mlc | grep -A 2 --no-group-separator "position  1" | cut -f 3 -d "/" | sed 's/.fasta/-/g' | cut -f 1,3- -d "-" | tr ":" " " | awk '{print $0, $6+$10}' > Summary_gc_bombyx_positions.txt
+grep -A 4 "P_sennae" ../estOmega/*.mlc | grep -A 2 --no-group-separator "position  1" | cut -f 3 -d "/" | sed 's/.fasta/-/g' | cut -f 1,3- -d "-" | tr ":" " " | awk '{print $0, $6+$10}' > Summary_gc_phoebis_positions.txt
+grep -A 4 "C_cecrops" ../estOmega/*.mlc | grep -A 2 --no-group-separator "position  1" | cut -f 3 -d "/" | sed 's/.fasta/-/g' | cut -f 1,3- -d "-" | tr ":" " " | awk '{print $0, $6+$10}' > Summary_gc_calycopis_positions.txt
+
+
+
+#etc Then merging all these into one file with geneID, gc content in each position from all branches
+for file in $(ls *positions.txt);do awk '{print $11}' $file  > $file.temp; done
+paste Summary_gc_all_positions.table Summary_gc_bombyx_positions.txt.temp Summary_gc_calycopis_positions.txt.temp Summary_gc_danaus_positions.txt.temp Summary_gc_heliconius_positions.txt.temp Summary_gc_larema_positions.txt.temp Summary_gc_leptidea_positions.txt.temp Summary_gc_papilio_positions.txt.temp Summary_gc_phoebis_positions.txt.temp > Summary_gc_total_positions.table
+
+header_gc.txt GeneID position all B_mori C_cecrops D_plexippus H_melpomene L_accius L_sinapis P_machaon P_sennae
+
+cat header_gc.txt Summary_gc_total_positions.table > Summary_gc_total_positions.csv
+
+#### LRT #######################
+#get likelihoods from both models
+grep "lnL" ../estOmega/*est.mlc | sed 's/.fasta/\//g' | tr ":" "/" | cut -f 3,8- -d "/" | tr -d "/" > summary_lnl_est.txt
+grep "lnL" ../fixOmega/*fix.mlc | sed 's/.fasta/\//g' | tr ":" "/" | cut -f 3,8- -d "/" | tr -d "/" > summary_lnl_fix.txt
+head
+wc -l 4581
+
+#join files and calculate LRT likelihood ratio test (2*(-lnlMH1-lnlMH0)) (eftersom de är neg värden kommer H1 |värde| < H0 |värde| vilket ger pos LRT om H1 högre lnl jmf H0)
+join summary_lnl_fix.txt summary_lnl_est.txt | awk '{printf("%s %s %s %.3f\n", $1,$2,$4,($4-$2)*2)}' > summary_LRT.txt
+
+
+#get p-value by comparing to Chi2 distribution with 1 df
+module load bioinfo tools paml/4.9e
+###### OBS!!! Convert the neg LRTs to 0 but keep original value (check with cut -f 4 -d ' ' summary_LRT.txt| grep "-" | wc -l = 172). These can be excluded from rank analysis later.
+cut -f 4 -d ' ' summary_LRT.txt | sed 's/^-[^ ]*/0.000/' | paste summary_LRT.txt - > summary_LRT_mod.txt
+awk '{print $5} ' summary_LRT_mod.txt | for line in $(cat); do chi2 1 $line; done | grep "prob" | cut -f 3 -d '=' | paste summary_LRT_mod.txt - > summary_LRT.pvalue.table 
+#less XM_004922498.2 -4861.477801 -4860.748675 1.458  1.458    0.227248610 
+wc -l 4867
+
+#p-value < 0.05 (before correction) 649 alignments
+
+#### Summarize in one table ######
+
+#set everything in one result file, check that the geneID is identical in list_genenames_order_BS_output.table and summary_LRT.pvalue.table
+paste list_genenames_order_BS_output.table summary_BS_partial.table alignment_length_sum.table summary_gc_all.table summary_gc_leptidea.table | join -  summary_LRT.pvalue.table > summary_results_BS_unfiltered.table
+
+
+################ FILTERING ########################
+
+#filter out to many gaps, if > 2x of alignment length (corresponds to more than 2 alignment only gaps 233) (filter on 1x removes 1285 seq) 
+#test awk '$14<$13 && $20<0.05 {print}' summary_results_BS_unfiltered.table | wc -l 359
+#test: awk '$14>$13 {print $0}' summary_results_BS_unfiltered.table | wc -l 
+#233
+
+#filter out too long tree length (cut off tree length dS> 30 ~ tree length > 30) 444 awk '$2<30 {print $0}' 
+#444
+
+#filter out genes with >900 dnds (not converging) 
+awk '$11>900' summary_results_BS_unfiltered.table | wc -l
+#>900 51
+
+#filter out neg LRT but keeping -0.000, can be considered 0
+awk '$18<0 {print $0}' summary_results_BS_unfiltered.table | wc -l 
+# 109
+
+#filter all at once
+awk '$14<$13 && $2<30 && $11<900 && $18>=0' summary_results_BS_unfiltered.table > summary_results_BS_filtered_hard.table
+#3223
+
+#or if only removing alignments with gaps equel two 2 seq length
+awk '$14/2<$13 && $2<30 && $11<900 && $18>=0' summary_results_BS_unfiltered.table > summary_results_BS_filtered_halfgaps.table
+#4150
+
+#I want to include all alignments that do not have technical issues, they are now filtered out
+
+
+################ FDR ###############################
+
+##for the filtered genes do FDR correction -> rank the genes after p-value with a number from 1 (highest p-value) to n (lowest p-value)
+#sort after p-value and add rank-number. Depending on Locale specification might be needed and sort options tailormade for the how the nr are displayed ex: LC_ALL=C sort -k4 -g  Lepidoptera_paml_BS_result.GC.length.filtered.table | awk '{print $0, NR}' > summary_results_filtered_sorted.table
+#sort -k (field) -r (reverse order) -g and -n might be needed... 
+
+##FDR ((n-rank+1)*0.05/(2*n)) (ref Thisen etal 2002) where n is number of tests(genes), rank is the reverse ranking by chi2 p-values (lower p-value - higher rank) 
+#ex: awk '{print $0, ((5734 - $15 + 1) * 0.05)/(2*5734)}' 
+sort -k 20 -r summary_results_BS_filtered_hard.table | awk '{print $0, NR, ((3223 - NR + 1)*0.05/(2*3223))}' > summary_results_BS_prel.table
+
+#sed -i '' 's/\,/\./g' ../data/summary_result_BS_FDR.table to replace comma instead of dot…
+
+#get the significant after FDR, where  p-values(field 20) from chi2-test are lower than the FDR critical values (field 22). What about = equal?
+ awk '$20<$22 {print $0}' summary_results_BS_prel.table > summary_results_BS_sign_unfiltered.table
+#25
+
+awk '$20<$22 {print $0}' summary_results_BS_halfgaps_prel.table > summary_results_BS_sign_unfiltered_halfgaps.table
+#51
+
+
+#filtering neutral (w = 1) n=1 
+grep -v "1.00000 1.00000 1.00000" summary_results_BS_sign_unfiltered.table > summary_results_BS_sign.table
+wc -l 24
+
+grep -v "1.00000 1.00000 1.00000" summary_results_BS_sign_unfiltered_halfgaps.table > summary_results_BS_sign_halfgaps.table
+wc -l 49
+
+#awk -F, '(NR==FNR){a[$1];next}!($1 in a)' blacklist.csv candidates.csv
+#   (NR==FNR){a[$1];next} if the total record count NR equals the record count of the file FNR (i.e. if we are reading the first file), store all values in array a and skip to the next record (do not do anything else)
+#   !($1 in a) if the first field is not in the array a then perform the default action which is print the line. This will only work on the second file as the condition of the first condition-action pair does not hold.
+#awk did not work...
+
+join -v 1 <(sort summary_results_BS_prel.table) <(sort summary_results_BS_sign.table) > summary_results_BS_nonsign.table
+wc -l 3199
+
+################
+
+#add header
+#header: GeneID tree_length kappa prop0 prop1 prop2a prop2b w0 w1 w2a w2b GeneID al_length tot_gaps gc_all lnl_fix lnl_est LRT corrLRT p-value rank FDR
+
+cat header_BS.txt summary_result_BS_sign.table > summary_result_BS_sign.csv
+cat header_BS.txt summary_results_BS_prel.table > summary_result_BS.csv
+cat header_BS.txt summary_results_BS_nonsign.table > summary_results_BS_nonsign.csv
+
+
+
+################ Result files #######################
+#files to export 
+
+summary_results_BS_FDR_sign.csv
+summary_results_BS_FDR.csv
+summary_results_BS_FDR_nonsign.csv
+summary_results_BS_unfiltered.table
+summary_results_BS_filtered_hard.table
+summary_results_BS_filtered_halfgaps_prel.table
+
+

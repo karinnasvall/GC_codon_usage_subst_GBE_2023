@@ -1,0 +1,264 @@
+> t.test(result_BS_sign_filtered$tree_length, result_BS_nonsign$tree_length)
+
+	Welch Two Sample t-test
+
+data:  result_BS_sign_filtered$tree_length and result_BS_nonsign$tree_length
+t = 3.2211, df = 40.667, p-value = 0.002514
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ 1.114291 4.862616
+sample estimates:
+mean of x mean of y 
+ 15.08950  12.10105 
+
+> wilcox.test(result_BS_sign_filtered$tree_length, result_BS_nonsign$tree_length)
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  result_BS_sign_filtered$tree_length and result_BS_nonsign$tree_length
+W = 110677, p-value = 0.0004794
+alternative hypothesis: true location shift is not equal to 0
+
+> 
+> #differ between gc-content
+> t.test(result_BS_sign_filtered$gc_all, result_BS_nonsign$gc_all)
+
+	Welch Two Sample t-test
+
+data:  result_BS_sign_filtered$gc_all and result_BS_nonsign$gc_all
+t = 6.5562, df = 41.314, p-value = 6.768e-08
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ 0.03607443 0.06818140
+sample estimates:
+mean of x mean of y 
+0.5085956 0.4564677 
+
+> wilcox.test(result_BS_sign_filtered$gc_all, result_BS_nonsign$gc_all, conf.int = T)
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  result_BS_sign_filtered$gc_all and result_BS_nonsign$gc_all
+W = 123531, p-value = 2.23e-07
+alternative hypothesis: true location shift is not equal to 0
+95 percent confidence interval:
+ 0.03463587 0.07257364
+sample estimates:
+difference in location 
+            0.05366833 
+
+> 
+> #differ in alignment length
+> t.test(result_BS_sign_filtered$al_length, result_BS_nonsign$al_length)
+
+	Welch Two Sample t-test
+
+data:  result_BS_sign_filtered$al_length and result_BS_nonsign$al_length
+t = 4.134, df = 40.078, p-value = 0.0001768
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ 1353.885 3943.680
+sample estimates:
+mean of x mean of y 
+ 4283.268  1634.486 
+
+> wilcox.test(result_BS_sign_filtered$al_length, result_BS_nonsign$al_length, conf.int = T)
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  result_BS_sign_filtered$al_length and result_BS_nonsign$al_length
+W = 140146, p-value = 1.843e-13
+alternative hypothesis: true location shift is not equal to 0
+95 percent confidence interval:
+ 1374 2163
+sample estimates:
+difference in location 
+                  1755 
+
+> 
+> #Exclude outlier, length > 20 000nt, even more significant
+> t.test(result_BS_sign_filtered$al_length[result_BS_sign_filtered$al_length < 20000], result_BS_nonsign$al_length)
+
+	Welch Two Sample t-test
+
+data:  result_BS_sign_filtered$al_length[result_BS_sign_filtered$al_length <  and result_BS_nonsign$al_length    20000] and result_BS_nonsign$al_length
+t = 5.4182, df = 39.202, p-value = 3.276e-06
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ 1338.913 2933.666
+sample estimates:
+mean of x mean of y 
+ 3770.775  1634.486 
+
+> wilcox.test(result_BS_sign_filtered$al_length[result_BS_sign_filtered$al_length < 20000], result_BS_nonsign$al_length)
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  result_BS_sign_filtered$al_length[result_BS_sign_filtered$al_length <  and result_BS_nonsign$al_length    20000] and result_BS_nonsign$al_length
+W = 136044, p-value = 6.994e-13
+alternative hypothesis: true location shift is not equal to 0
+
+Comparisons conserved geneset and aligned geneset
+t.test(result_BS_100_cons_ordered$al_length, result_BS$al_length)
+
+	Welch Two Sample t-test
+
+data:  result_BS_100_cons_ordered$al_length and result_BS$al_length
+t = -15.067, df = 130.2, p-value < 2.2e-16
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ -1010.3428  -775.8116
+sample estimates:
+mean of x mean of y 
+  770.310  1663.387 
+
+> wilcox.test(result_BS_100_cons_ordered$al_length, result_BS$al_length)
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  result_BS_100_cons_ordered$al_length and result_BS$al_length
+W = 80303, p-value < 2.2e-16
+alternative hypothesis: true location shift is not equal to 0
+
+> 
+> boxplot(result_BS_100_cons_ordered$gc_all, result_BS$gc_all)
+> t.test(result_BS_100_cons_ordered$gc_all, result_BS$gc_all)
+
+	Welch Two Sample t-test
+
+data:  result_BS_100_cons_ordered$gc_all and result_BS$gc_all
+t = -0.74219, df = 103.95, p-value = 0.4596
+alternative hypothesis: true difference in means is not equal to 0
+95 percent confidence interval:
+ -0.017608629  0.008017607
+sample estimates:
+mean of x mean of y 
+0.4521602 0.4569557 
+
+> wilcox.test(result_BS_100_cons_ordered$gc_all, result_BS$gc_all)
+
+	Wilcoxon rank sum test with continuity correction
+
+data:  result_BS_100_cons_ordered$gc_all and result_BS$gc_all
+W = 195226, p-value = 0.3114
+alternative hypothesis: true location shift is not equal to 0
+
+
+Correlation test for the aligned dataset
+
+> cor.test(result_BS$w0, result_BS$al_length)
+
+	Pearson's product-moment correlation
+
+data:  result_BS$w0 and result_BS$al_length
+t = 8.7213, df = 4148, p-value < 2.2e-16
+alternative hypothesis: true correlation is not equal to 0
+95 percent confidence interval:
+ 0.1041878 0.1639454
+sample estimates:
+      cor 
+0.1341886 
+
+> cor.test(result_BS$w0, result_BS$al_length, method = "spearman")
+
+	Spearman's rank correlation rho
+
+data:  result_BS$w0 and result_BS$al_length
+S = 9147499766, p-value < 2.2e-16
+alternative hypothesis: true rho is not equal to 0
+sample estimates:
+      rho 
+0.2320916 
+
+Warning message:
+In cor.test.default(result_BS$w0, result_BS$al_length, method = "spearman") :
+  Cannot compute exact p-value with ties
+> cor.test(result_BS$w0, result_BS$al_length, method = "kendall")
+
+	Kendall's rank correlation tau
+
+data:  result_BS$w0 and result_BS$al_length
+z = 15.152, p-value < 2.2e-16
+alternative hypothesis: true tau is not equal to 0
+sample estimates:
+      tau 
+0.1569715 
+
+> 
+> cor.test(result_BS$w0, result_BS$tree_length)
+
+	Pearson's product-moment correlation
+
+data:  result_BS$w0 and result_BS$tree_length
+t = 14.488, df = 4148, p-value < 2.2e-16
+alternative hypothesis: true correlation is not equal to 0
+95 percent confidence interval:
+ 0.1903051 0.2482292
+sample estimates:
+      cor 
+0.2194606 
+
+> cor.test(result_BS$w0, result_BS$tree_length, method = "spearman")
+
+	Spearman's rank correlation rho
+
+data:  result_BS$w0 and result_BS$tree_length
+S = 8297628035, p-value < 2.2e-16
+alternative hypothesis: true rho is not equal to 0
+sample estimates:
+      rho 
+0.3034361 
+
+Warning message:
+In cor.test.default(result_BS$w0, result_BS$tree_length, method = "spearman") :
+  Cannot compute exact p-value with ties
+> cor.test(result_BS$w0, result_BS$tree_length, method = "kendall")
+
+	Kendall's rank correlation tau
+
+data:  result_BS$w0 and result_BS$tree_length
+z = 20.15, p-value < 2.2e-16
+alternative hypothesis: true tau is not equal to 0
+sample estimates:
+      tau 
+0.2086284 
+
+> 
+> cor.test(result_BS$w0, result_BS$gc_all)
+
+	Pearson's product-moment correlation
+
+data:  result_BS$w0 and result_BS$gc_all
+t = 0.025514, df = 4148, p-value = 0.9796
+alternative hypothesis: true correlation is not equal to 0
+95 percent confidence interval:
+ -0.03003037  0.03082193
+sample estimates:
+         cor 
+0.0003961466 
+
+> cor.test(result_BS$w0, result_BS$gc_all, method = "spearman")
+
+	Spearman's rank correlation rho
+
+data:  result_BS$w0 and result_BS$gc_all
+S = 1.1869e+10, p-value = 0.8159
+alternative hypothesis: true rho is not equal to 0
+sample estimates:
+        rho 
+0.003614684 
+
+Warning message:
+In cor.test.default(result_BS$w0, result_BS$gc_all, method = "spearman") :
+  Cannot compute exact p-value with ties
+> cor.test(result_BS$w0, result_BS$gc_all, method = "kendall")
+
+	Kendall's rank correlation tau
+
+data:  result_BS$w0 and result_BS$gc_all
+z = 0.20673, p-value = 0.8362
+alternative hypothesis: true tau is not equal to 0
+sample estimates:
+        tau 
+0.002140481 
+

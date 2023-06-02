@@ -1,0 +1,93 @@
+
+#Analysing distribution of trna with trnascan-SE
+#best manual https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6768409/
+#also read https://doi.org/10.1093/nar/gkab688
+
+#used DTOL pacbio genome (most complete when it comes to repeats)
+
+wget https://ftp.ncbi.nlm.nih.gov/genomes/all/GCA/905/404/315/GCA_905404315.1_ilLepSina1.1/GCA_905404315.1_ilLepSina1.1_genomic.fna.gz
+
+#remove mitochondria and unresolved scaffolds
+#only include the chromosome level scaffolds
+
+#split in chromosomes (split fasta)
+
+#script split fasta (09a_split_fasta.sbatch)
+#split multifasta into multiple fasta file by id
+
+wd=/proj/uppstore2017185/b2014034_nobackup/Karin/Lepidoptera_dnds_project/data/
+input=GCA_905404315.1_ilLepSina1.1_genomic.filt.fna.gz
+
+module load bioinfo-tools SeqKit/0.15.0
+
+cd $wd
+
+seqkit split --by-id ${input} --two-pass
+
+
+
+
+#run transcan-SE (first run for just one chr to test)
+#script trnascan (09b_tRNA_scan.sbatch)
+
+module load bioinfo-tools tRNAscan-SE/2.0.9
+
+wd=/Lepidoptera_dnds_project/outputs/trna_scan
+input=/Lepidoptera_dnds_project/data/GCA_905404315.1_ilLepSina1.1_genomic.filt.fna.gz.split
+
+cd $wd
+output=output2
+
+mkdir $output
+
+for file in $(ls $input)
+do echo $file 
+tRNAscan-SE -HQ -o# -f# -m# -s# -a# --detail -p $output/${file} ${input}/${file}
+date 
+done 
+wait
+
+
+
+
+#get output
+#filter out all with notes in column 14 (trunceted, multiple isotypes, pseudogenes)
+awk 'FNR>3 && $14=="" && $6!="NNN" {print $0}' output2/GCA_905404315.1_ilLepSina1.1_genomic.filt.id_*.out > all_trna_filt.out
+#461
+
+#including pseudogenes and truncated genes
+awk '!/IPD/ && FNR>3 && $6!="NNN" {print $0}' output2/GCA_905404315.1_ilLepSina1.1_genomic.filt.id_*.out > all_trna.out 
+#674
+
+#gc-content in first position of anticodon
+cut -f6 all_trna_filt.out |grep "^G" |wc -l
+#173
+cut -f6 all_trna_filt.out |grep "^C" |wc -l
+#94
+cut -f6 all_trna_filt.out |grep "^A" |wc -l
+#91
+cut -f6 all_trna_filt.out |grep "^T" |wc -l
+#103
+#GC-content 57.9%
+
+
+#get aa
+#make multifasta
+cut -f6 all_trna_filt.out |awk '{print ">"$1};1' > list_trna.fa 
+
+#reverse complement
+seqtk seq -r list_trna.fa > list_trna_rev.fa
+
+#convert to text
+grep -v ">" list_trna_rev.fa > list_trna_rev.txt
+
+#get aa to translated anticodons, adds a 0 to unused codons
+join -a 1 <(sort genetic_code.txt) <(sort list_trna_rev.txt) | awk '$3=="" {$3=0};{$3=$3}1' > list_trna_aa.txt
+
+#get count of codons
+uniq -c list_trna_aa.txt |sort -k3 > list_trna_aa.table
+
+#get expected frequency and nr of synonymous codons
+awk '$3 ~ /[AGPTV]/{$(NF +1)= 0.25;$(NF + 2)=4} $3 ~ /[LRS]/{$(NF +1)= 0.17; $(NF + 2)=6} $3 ~ /I/{$(NF +1)= 0.33; $(NF + 2)=3} $3 ~ /[CDEFHKNQY]/{$(NF +1)= 0.50;$(NF + 2)=2} $3 ~ /[MW]/{$(NF +1)= 1.00;$(NF + 2)=1} $3 ~ /\*/{next} {print;}' list_trna_aa.table > list_trna_aa_freq.table
+
+#do the analysis in r

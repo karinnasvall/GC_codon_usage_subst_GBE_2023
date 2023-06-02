@@ -1,0 +1,481 @@
+---
+title: "trna_scan"
+author: "KN"
+date: "7/26/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Trna-scan
+
+```{r set up}
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library("nord")
+
+
+```
+
+
+```{r data}
+trna <- read.table(file = "data/list_trna_aa_freq.table")
+str(trna)
+
+#V4 is present=1, absent=0, correct counts in V1
+trna[trna$V4==0,]$V1 <- 0
+
+syn_codons <- aggregate(V1~V3, sum, data=trna)
+colnames(syn_codons) <- c("V3", "tot_counts")
+
+trna <- left_join(trna, syn_codons)
+
+trna$obs_freq <- round(trna$V1/trna$tot_counts, 3)
+trna$exp_counts <- round(trna$V5*trna$tot_counts, 3)
+trna$RSCU <- trna$obs_freq/trna$V5
+
+trna <- separate(trna, col = V2, into = c("first", "second", "third"), remove = F, sep = c(1,2))
+trna$first <- factor(trna$first, levels = c("A", "T", "G", "C"))
+trna$second <- factor(trna$second, levels = c("A", "T", "G", "C"))
+trna$third <- factor(trna$third, levels = c("A", "T", "G", "C"))
+
+colnames(trna) <- c( "obs_counts_trna", "codon" ,"first", "second", "third", "AA", "presence", "exp_freq_trna", "syn_nr", "tot_counts", "obs_freq_trna", "exp_counts_trna", "RSCU_trna" )
+
+
+ggplot(trna) +
+  geom_bar(aes(AA, obs_counts_trna, fill=codon), stat = "identity") +
+  #facet_wrap(~AA) +
+  coord_flip() +
+  theme(
+    axis.text.x = element_text(angle = 90)
+  )
+
+ggplot(trna_long, aes(codon, RSCU_trna, group=AA)) +
+  geom_bar( position = "dodge", stat = "identity") +
+  #facet_wrap(~AA) +
+  coord_flip() +
+  theme(
+    axis.text.x = element_text(angle = 90)
+  )
+
+plot(trna$obs_freq~trna$exp_freq_trna)
+plot(trna$obs_counts_trna~trna$exp_counts_trna)
+
+#obs codons
+summary_nr_codons <- cbind(aggregate(codon~third, length, data = trna[trna$presence==1,]),
+aggregate(codon~third, length, data = trna)$codon, #expected codons
+aggregate(obs_counts_trna~third, sum, data = trna)$obs_counts_trna) #total nr of codons
+
+colnames(summary_nr_codons) <- c("Nucleotide_3rd", "Obs_codons", "Exp_codons", "Tot_nr_codons")
+write.table(summary_nr_codons, file = "result/summary_nr_codons.txt")
+
+#trna histogram
+hist(trna$obs_counts_trna, breaks = 40)
+
+ggplot(trna) +
+  geom_histogram(aes(obs_counts_trna), binwidth = 1, fill="light grey", colour="black") +
+       theme(axis.text.x = element_text(size = 10,
+                                       colour = "black"),
+            axis.text.y = element_text(size = 10,
+                                       colour = "black"),
+            axis.line = element_line(colour = "black",
+                                     size = 0.2),
+            axis.ticks.length = unit(0.1, "cm"),
+            axis.ticks = element_line(size = 0.2),
+            panel.background = element_blank(), 
+            panel.grid = element_blank())
+
+ggsave("result/hist_count.pdf", device = "pdf", height = 4, width = 6)
+ggsave("result/hist_count.png", device = "png")
+```
+
+
+```{r rscu}
+
+hist(trna[trna$RSCU_trna>0,]$RSCU, breaks = 20)
+aggregate(codon~third, length, data = trna[trna$RSCU_trna>1.1,])
+
+
+#get third position order
+#trna$codon[order(trna$third)]
+
+ggplot(trna) +
+  geom_tile(aes(AA, factor(trna$codon, levels=trna$codon[order(trna$third)]), fill=RSCU_trna), colour = "black") +
+  scale_fill_gradientn(colours = c("white", muted("blue"), "light grey", muted("red")), 
+                       values = c(0,0.1,0.3, 1)) +
+       theme(axis.text.x = element_text(size = 10,
+                                       colour = "black"),
+            axis.text.y = element_text(size = 10,
+                                       colour = "black"),
+            axis.title = element_blank(),
+            axis.line = element_line(colour = "black",
+                                     size = 0.2),
+            axis.ticks.length = unit(0.1, "cm"),
+            axis.ticks = element_line(size = 0.2),
+            panel.background = element_blank(), 
+            panel.grid = element_blank())
+  
+  
+
+```
+Third position C becomes G in the anticodon, G can wobble with C/U
+Third position G (anticodon C) is non wobbly and only match G
+
+The distribution of trna genes is in line with the wobble hypothesis, only one G-ending gene is overrepresented. The overrepresented codon do not show strong AT- or GC-bias 10 vs 12. 
+
+The trna genes show a GC-bias pattern with third position GC-content 57%, but if excluding one outlier Thr ACC (57 copies), there is a slight GC-bias 52%. The GC-content at third position the trna genes is higher than expected considering the AT-mutation bias, and the overrepresentation of AT-ending codons in coding sequences. Suggest that there is a selection pressure maintaining higher GC-content counteracting the mutation bias. 
+
+
+```{r gc_content}
+
+
+trna_gc1 <- aggregate(obs_counts_trna~first, sum, data = trna)
+colnames(trna_gc1) <- c("nt", "count")
+trna_gc1$position <- "first"
+
+trna_gc2 <- aggregate(obs_counts_trna~second, sum, data = trna)
+colnames(trna_gc2) <- c("nt", "count")
+trna_gc2$position <- "second"
+
+trna_gc3 <- aggregate(obs_counts_trna~third, sum, data = trna)
+colnames(trna_gc3) <- c("nt", "count")
+trna_gc3$position <- "third"
+
+trna_gc <- rbind(trna_gc1, trna_gc2, trna_gc3)
+
+trna_gc$content <- round(100*trna_gc$count/sum(trna$obs_counts_trna), 2)
+
+trna_gc_summary <- 
+rbind(pivot_wider(trna_gc, values_from = c(count, content), names_from = position)[c(1,5,6,7)],
+c("GC", trna_gc[trna_gc$position=="first" & trna_gc$nt=="G",]$content + 
+  trna_gc[trna_gc$position=="first" & trna_gc$nt=="C",]$content,
+trna_gc[trna_gc$position=="second" & trna_gc$nt=="G",]$content + 
+  trna_gc[trna_gc$position=="second" & trna_gc$nt=="C",]$content,
+trna_gc[trna_gc$position=="third" & trna_gc$nt=="G",]$content + 
+  trna_gc[trna_gc$position=="third" & trna_gc$nt=="C",]$content))
+
+colnames(trna_gc_summary) <- c("Nucleotide", "First", "Second", "Third")
+
+write.table(trna_gc_summary, file = "result/trna_result_gc_summary.table", )
+
+gc_colours <- nord(n=3, "red_mountain")
+ggplot(trna_gc) +
+  geom_bar(aes(nt, content, fill=position), stat = "identity", position = "dodge") +
+  scale_fill_manual(values = gc_colours) +
+        theme(axis.text.x = element_text(size = 10,
+                                       colour = "black"),
+            axis.text.y = element_text(size = 10,
+                                       colour = "black"),
+            axis.title.y = element_text(size = 10, angle = 0,vjust = 0.5),
+            axis.line = element_line(colour = "black",
+                                     size = 0.2),
+            axis.ticks.length = unit(0.1, "cm"),
+            axis.ticks = element_line(size = 0.2),
+            panel.background = element_blank())
+  
+
+#if excluding Thr ACC
+
+
+sum_gc_excl <- as.data.frame(aggregate(obs_counts_trna~first, sum, data = trna[trna$codon!="ACC",])$obs_counts_trna/sum(trna[trna$codon!="ACC",]$obs_counts_trna)*100)
+colnames(sum_gc_excl) <- "First"
+
+sum_gc_excl$Second <- aggregate(obs_counts_trna~second, sum, data = trna[trna$codon!="ACC",])$obs_counts_trna/sum(trna[trna$codon!="ACC",]$obs_counts_trna)*100
+
+sum_gc_excl$Third <- aggregate(obs_counts_trna~third, sum, data = trna[trna$codon!="ACC",])$obs_counts_trna/sum(trna[trna$codon!="ACC",]$obs_counts_trna)*100
+
+write.table(sum_gc_excl, append = T, file = "result/trna_result_gc_summary.table")
+
+
+```
+
+
+```{r test}
+
+#contingency table is best option to compare the obs and exp
+chisq_res <- chisq.test(trna[,c("obs_counts_trna","exp_counts_trna")])
+capture.output(chisq_res, file = "result/chi_sq_res_trna.txt")
+
+#excluding outlier
+chisq.test(trna[trna$codon!="ACC",][,c("obs_counts_trna","exp_counts_trna")])
+
+###################
+#obs can't do corr test because the AA-counts are correlated (exp counts are depending on the obs count per AA)
+cor.test(trna$obs_counts_trna, trna$exp_counts_trna)
+plot(trna$obs_counts_trna, trna$exp_counts_trna)
+cbind(aggregate(obs_counts_trna~AA, sum, data = cub)$obs_counts_trna, aggregate(exp_counts_trna~AA, sum, data = cub)$exp_counts_trna)
+###################
+
+
+
+```
+
+```{r comp_cds}
+#compare trna codon distrubtion with cds codon distribution
+
+cub <- read.table("../07_codon_usage/07_03_codon_usage_analysis_r/data/cds_CUT_all.table", header=T)
+#only L. sin and remove stopcodons
+cub <- cub[cub$Branch=="l_sin" & cub$AA!="*",]
+
+cub <- left_join(cub, trna, by = c("Codon"="codon", "AA"="AA"))
+
+#compare AA counts of codons and anticodons
+cor.test(aggregate(obs_counts_trna~AA, sum, data = cub)$obs_counts_trna, aggregate(exp_counts_461_cds~AA, sum, data = cub)$exp_counts_461_cds)
+
+plot(aggregate(obs_counts_trna~AA, sum, data = cub)$obs_counts_trna, aggregate(exp_counts_461_cds~AA, sum, data = cub)$exp_counts_461_cds)
+
+#excl ACC
+cor.test(aggregate(obs_counts_trna~AA, sum, data = cub_excl)$obs_counts_trna, aggregate(exp_counts_461_cds~AA, sum, data = cub_excl)$exp_counts_461_cds)
+
+cor.test(aggregate(obs_counts_trna~AA, sum, data = cub_excl)$obs_counts_trna, aggregate(Frequency~AA, sum, data = cub_excl)$Frequency)
+
+
+```
+
+
+```{r comp_rscu_cds}
+#add cds RSCU
+cub$RSCU <- cub$Fraction/cub$exp_freq_trna
+
+
+#counts
+#corr test
+#exp counts for 461 codons
+cub$exp_counts_461_cds <- cub$Frequency*0.461
+
+cor.test(cub$obs_counts_trna, cub$exp_counts_461_cds, method = "spearman")
+chisq.test(cub[,c("obs_counts_trna", "exp_counts_461_cds")])
+capture.output(cor.test(cub$obs_counts_trna, cub$exp_counts_461_cds, method = "spearman"), file = "cor_test_result.txt")
+
+#excluding Thr ACC
+cub_excl <- cub[cub$Codon!="ACC",]
+cub_excl$exp_counts_461_cds <- cub_excl$Frequency*(sum(cub_excl$obs_counts_trna)/1000)
+
+cor.test(cub_excl$obs_counts_trna, cub_excl$exp_counts_461_cds, method = "spearman")
+chisq.test(cub_excl[,c("obs_counts_trna", "exp_counts_461_cds")])
+
+capture.output(cor.test(cub_excl$obs_counts_trna, cub_excl$exp_counts_461_cds, method = "spearman"), file = "cor_test_result.txt", append = T)
+
+
+#write the table (to rerun analysis, use this table)
+# write.table(cub, file = "data/cub_data.table")
+# write.table(cub_excl, file = "data/cub_data_excl_ACC.table")
+# 
+# #read if not in env
+# cub <- read.table(file = "data/cub_data.table", header = T)
+
+#check third position GC
+aggregate(Number~third, sum, data = cub)
+aggregate(Number~third, sum, data = cub)$Number/sum(cub$Number)
+
+#compare RSCU
+cor.test(cub$RSCU, cub$RSCU_trna, method = "spearman")
+#with count > 0
+cor.test(cub_excl[cub_excl$obs_counts_trna>0,]$RSCU, cub_excl[cub_excl$obs_counts_trna>0,]$RSCU_trna, method = "spearman")
+
+#cannot be used on floats need integers
+chisq.test(cub[,c("RSCU", "RSCU_trna")])
+
+#excl ACC
+cor.test(cub_excl$RSCU, cub_excl$RSCU_trna, method = "spearman")
+
+#freq expected to be correlated!
+chisq.test(cub[,c("obs_freq_trna", "Fraction")])
+cor.test(cub$obs_freq_trna, cub$Fraction)
+
+ggplot(cub) +
+  geom_point(aes(Codon, RSCU_trna), colour="red") +
+  geom_point(aes(Codon, RSCU), colour="blue") +
+  geom_errorbar(aes(Codon, ymin=RSCU, ymax=RSCU_trna)) +
+  geom_hline(yintercept = 1)
+
+ggplot(cub, aes(RSCU, RSCU_trna)) +
+  geom_point(colour="red") +
+  geom_smooth(method = "lm") +
+  stat_cor(method = "spearman", cor.coef.name = "rho")
+  
+
+ggplot(cub, aes(obs_counts_trna, exp_counts_461_cds)) +
+  geom_point() +
+  geom_smooth(method = lm) +
+  stat_cor(method = "spearman", cor.coef.name = "rho")
+
+ggplot(cub) +
+  geom_point(aes(Codon, obs_counts_trna), colour="red") +
+  geom_point(aes(Codon, exp_counts_461_cds), colour="blue") +
+  geom_errorbar(aes(Codon, ymin=obs_counts_trna, ymax=exp_counts_461_cds))
+
+ggplot(cub_excl, aes(exp_counts_461_cds, obs_counts_trna)) +
+  geom_point() +
+  geom_smooth(method = lm) +
+  stat_cor(method = "spearman", cor.coef.name = "rho")
+
+ggplot(cub_excl) +
+  geom_point(aes(Codon, obs_counts_trna), colour="red") +
+  geom_point(aes(Codon, exp_counts_461_cds), colour="blue") +
+  geom_errorbar(aes(Codon, ymin=obs_counts_trna, ymax=exp_counts_461_cds))
+
+ggplot(cub[cub$obs_counts_trna>0,], aes(obs_counts_trna, exp_counts_461_cds)) +
+  geom_point() +
+  geom_smooth(method = lm) +
+  stat_cor(method = "spearman", cor.coef.name = "rho")
+
+ggplot(cub_excl[cub_excl$obs_counts_trna>0,], aes( obs_counts_trna, exp_counts_461_cds)) +
+  geom_point() +
+  geom_smooth(method = lm) +
+  stat_cor(method = "spearman", cor.coef.name = "rho")
+```
+
+```{r plots_comp}
+
+#in one file 
+ggplot() +
+  geom_point(data = aggregate(obs_counts_trna~AA, sum, data = cub_excl), aes(aggregate(obs_counts_trna~AA, sum, data = cub_excl)$obs_counts_trna, aggregate(Frequency~AA, sum, data = cub_excl)$Frequency, colour=AA), size=3) +
+  geom_point(data = aggregate(obs_counts_trna~AA, sum, data = cub), aes(aggregate(obs_counts_trna~AA, sum, data = cub)$obs_counts_trna, aggregate(Frequency~AA, sum, data = cub)$Frequency, colour=AA), size=3) +
+  scale_y_continuous(name = "Codons used in CDS (count/1000 bp)",
+                     limits = c(0,100)) +
+  scale_x_continuous(name = "Copies of tRNA-genes (count)",
+                     limits = c(0,85)) +
+      stat_cor(data = aggregate(obs_counts_trna~AA, sum, data = cub_excl), aes(aggregate(obs_counts_trna~AA, sum, data = cub_excl)$obs_counts_trna, aggregate(Frequency~AA, sum, data = cub_excl)$Frequency), label.x = 60, label.y = 27) +
+    stat_cor(data = aggregate(obs_counts_trna~AA, sum, data = cub), aes(aggregate(obs_counts_trna~AA, sum, data = cub)$obs_counts_trna, aggregate(Frequency~AA, sum, data = cub)$Frequency), label.x = 60, label.y = 20, colour="grey") +
+  geom_smooth(data = aggregate(obs_counts_trna~AA, sum, data = cub_excl), aes(aggregate(obs_counts_trna~AA, sum, data = cub_excl)$obs_counts_trna, aggregate(Frequency~AA, sum, data = cub_excl)$Frequency), method = "lm", colour="black", size = 2, se = F) +
+  geom_smooth(data = aggregate(obs_counts_trna~AA, sum, data = cub), aes(aggregate(obs_counts_trna~AA, sum, data = cub)$obs_counts_trna, aggregate(Frequency~AA, sum, data = cub)$Frequency), method = "lm", colour="grey", linetype="dashed", size = 2, se = F) +
+  scale_color_manual(values = c(nord_palettes$moose_pond,nord_palettes$red_mountain,nord_palettes$frost), 
+                      name = "Amino acid") +
+          theme(axis.text.x = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            axis.text.y = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            axis.title.y = element_text(size = TXT_SIZE),
+            axis.line = element_line(colour = "black",
+                                     size = 0.2),
+            axis.ticks.length = unit(0.1, "cm"),
+            axis.ticks = element_line(size = 0.2),
+            panel.background = element_blank(), 
+            legend.key = element_blank())
+
+  
+
+ggsave("result/cor_aa_both.pdf", device = "pdf", height = 8, width = 10)
+ggsave("result/cor_aa_both.png", device = "png", height = 8, width = 10)
+
+#in separate files
+ggplot(aggregate(obs_counts_trna~AA, sum, data = cub_excl), aes(aggregate(obs_counts_trna~AA, sum, data = cub_excl)$obs_counts_trna, aggregate(Frequency~AA, sum, data = cub_excl)$Frequency)) +
+  geom_point(aes(colour=AA), size=3) +
+  scale_y_continuous(name = "Codons used in CDS (count/1000 bp)",
+                     limits = c(0,100)) +
+  scale_x_continuous(name = "Copies of tRNA-genes (count)",
+                     limits = c(0,50)) +
+  stat_cor() +
+  geom_smooth(method = "lm", colour="grey", linetype="dashed", size = 2, se = F) +
+          theme(axis.text.x = element_text(size = 10,
+                                       colour = "black"),
+            axis.text.y = element_text(size = 10,
+                                       colour = "black"),
+            axis.title.y = element_text(size = 10),
+            axis.line = element_line(colour = "black",
+                                     size = 0.2),
+            axis.ticks.length = unit(0.1, "cm"),
+            axis.ticks = element_line(size = 0.2),
+            panel.background = element_blank())
+
+  
+
+ggsave("result/cor_aa_excl.pdf", device = "pdf", height = 8, width = 8)
+ggsave("result/cor_aa_excl.png", device = "png", height = 8, width = 8)
+
+
+ggplot(aggregate(obs_counts_trna~AA, sum, data = cub), aes(aggregate(obs_counts_trna~AA, sum, data = cub)$obs_counts_trna, aggregate(Frequency~AA, sum, data = cub)$Frequency)) +
+  geom_point(aes(colour=AA), size=3) +
+  scale_y_continuous(name = "Codons used in CDS (count/1000 bp)",
+                     limits = c(0,100)) +
+  scale_x_continuous(name = "Copies of tRNA-genes (count)",
+                     limits = c(0,100)) +
+  stat_cor() +
+  geom_smooth(method = "lm", colour="grey", linetype="dashed", size = 2, se = F) +
+          theme(axis.text.x = element_text(size = 10,
+                                       colour = "black"),
+            axis.text.y = element_text(size = 10,
+                                       colour = "black"),
+            axis.title.y = element_text(size = 10),
+            axis.line = element_line(colour = "black",
+                                     size = 0.2),
+            axis.ticks.length = unit(0.1, "cm"),
+            axis.ticks = element_line(size = 0.2),
+            panel.background = element_blank())
+
+  
+
+ggsave("result/cor_aa.pdf", device = "pdf", height = 8, width = 8)
+ggsave("result/cor_aa.png", device = "png", height = 8, width = 8)
+
+
+```
+
+
+```{r comp_presence_absence}
+#presence/absence
+ggplot(cub, aes(as.factor(presence), Frequency)) +
+  geom_boxplot() +
+  stat_compare_means()
+
+ggplot(cub, aes(as.factor(presence), RSCU)) +
+  geom_boxplot() +
+  stat_compare_means()
+
+#remove only one codon
+ggarrange(
+ggplot(cub[cub$syn_nr>1,], aes(as.factor(presence), Frequency)) +
+  geom_boxplot() +
+  stat_compare_means() +
+  labs(title = "All excl 0-fold") +
+  scale_y_continuous(limits = c(0,40)),
+
+# ggplot(cub[cub$syn_nr>1,], aes(as.factor(presence), RSCU)) +
+#   geom_boxplot() +
+#   stat_compare_means() +
+#   labs(title = "All excl 0-fold"),
+  
+
+#remove 2-fold
+ggplot(cub[cub$syn_nr==4 | cub$syn_nr==6,], aes(as.factor(presence), Frequency)) +
+  geom_boxplot() +
+  stat_compare_means() +
+  labs(title = "Excl 2-fold") +
+  scale_y_continuous(limits = c(0,40)))
+
+# ggplot(cub[cub$syn_nr>2,], aes(as.factor(presence), RSCU)) +
+#   geom_boxplot() +
+#   stat_compare_means() +
+#   labs(title = "Excl 2-fold"))
+
+
+wilcox.test(cub[cub$presence==1 & cub$syn_nr>1,]$Frequency, cub[cub$presence==0 & cub$syn_nr>1,]$Frequency)
+
+ggplot(cub, aes(as.factor(presence))) +
+  geom_bar(aes(fill=as.factor(syn_nr)), position = "dodge") 
+
+ggplot(cub[cub$syn_nr==2,], aes(as.factor(presence), RSCU)) +
+  geom_boxplot() +
+  stat_compare_means()
+
+ggplot(cub, aes(as.factor(presence), RSCU, fill=as.factor(syn_nr))) +
+  geom_boxplot() +
+  stat_compare_means()
+
+ggplot(cub, aes(as.factor(presence), RSCU)) +
+  geom_boxplot() +
+  stat_compare_means() +
+  facet_grid(~as.factor(syn_nr))
+
+ggplot(cub, aes(as.factor(presence), Frequency)) +
+  geom_boxplot() +
+  stat_compare_means() +
+  facet_grid(~as.factor(syn_nr))
+
+
+```

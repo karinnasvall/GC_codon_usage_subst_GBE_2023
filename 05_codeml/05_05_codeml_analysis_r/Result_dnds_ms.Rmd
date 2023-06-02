@@ -1,0 +1,416 @@
+---
+title: "Result_dnds_ms"
+output:
+  word_document: default
+  html_document: default
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+##Supplementary Analyses
+# Result codeml branch-site genes under positive selection in L. sinapis
+```{r bs_data, echo=FALSE}
+library(ggplot2)
+library(viridis)
+library(tidyverse)
+library(gridExtra)
+library(ggpubr)
+library(nord)
+
+date()
+sessionInfo()
+
+
+
+result_BS <- read.table("../../results_summary_200514/summary_results_BS_soft.csv", header = T, row.names = 1)
+
+result_BS_sign <- read.table("../../../results_summary_200514/summary_results_BS_sign_soft.csv", header = T, row.names = 1)
+
+result_BS_nonsign <- read.table("../../../results_summary_200514/summary_results_BS_nonsign_soft.csv", header = T, row.names = 1)
+
+```
+
+```{r bs_summary, eval=FALSE}
+capture.output(summary(result_BS), file = "Result_dnds_ms_files/summary_bs.txt")
+#add sd manually
+list(sd(result_BS$tree_length),
+sd(result_BS$w0),
+sd(result_BS$al_length),
+sd(result_BS$gc_all))
+
+capture.output(summary(result_BS_sign_filtered), file = "Result_dnds_ms_files/summary_bs_sign.txt")
+#add sd manually
+list(sd(result_BS_sign_filtered$tree_length),
+sd(result_BS_sign_filtered$w0),
+sd(result_BS_sign_filtered$al_length),
+sd(result_BS_sign_filtered$gc_all))
+
+capture.output(summary(result_BS_100_cons), file = "Result_dnds_ms_files/summary_bs_100_cons.txt")
+#add sd manually
+list(sd(result_BS_100_cons$tree_length),
+sd(result_BS_100_cons$w0),
+sd(result_BS_100_cons$al_length),
+sd(result_BS_100_cons$gc_all))
+
+
+
+```
+
+
+```{r bs_corr_runs, echo=FALSE}
+
+BS_run1_unfiltered <- read.table("../../../results_summary_200514/summary_results_BS_unfiltered.csv", header = T)
+str(BS_run1_unfiltered)
+summary(BS_run1_unfiltered)
+
+BS_run2_unfiltered <- read.table("../../../results_summary_200514/summary_results_BS_unfiltered_run2.csv", header = T)
+str(BS_run2_unfiltered)
+summary(BS_run2_unfiltered)
+
+#Comparing w0, w2b, LRT
+cor.test(BS_run1_unfiltered$w0, BS_run2_unfiltered$w0)
+
+cor.test(BS_run1_unfiltered$w2b, BS_run2_unfiltered$w2b)
+
+cor.test(BS_run1_unfiltered$LRT, BS_run2_unfiltered$LRT)
+
+plot(BS_run2_unfiltered$p.value[BS_run1_unfiltered$p.value < 0.05], BS_run1_unfiltered$p.value[BS_run1_unfiltered$p.value < 0.05])
+
+#Check how many candidate genes in each run
+length(BS_run2_unfiltered$p.value[BS_run2_unfiltered$p.value < max(result_BS_sign$p.value)])
+length(BS_run1_unfiltered$p.value[BS_run1_unfiltered$p.value < max(result_BS_sign$p.value)])
+
+#Get nr of genes sign in both runs
+test_subset <- subset(BS_run2_unfiltered, BS_run2_unfiltered$GeneID %in% result_BS_sign$GeneID.1 & BS_run2_unfiltered$p.value < max(result_BS_sign$p.value))
+#41 genes
+
+# filtered dataframe of sign genens in both runs, 41
+result_BS_sign_filtered <- subset(result_BS_sign, result_BS_sign$GeneID.1 %in% test_subset$GeneID)
+
+#get the 100 most conserved genes (lowest w0)
+result_BS_100_cons <- top_n(x = result_BS,
+                            n = -100,
+                            wt = result_BS$w0)
+rownames(result_BS_100_cons) <- result_BS_100_cons$GeneID.1
+
+#filter for presence in both runs
+conserved_check <- subset(BS_run2_unfiltered, BS_run2_unfiltered$GeneID %in% result_BS_100_cons$GeneID.1)
+rownames(conserved_check) <- conserved_check$GeneID
+#length(conserved_check$GeneID)
+#100 genes
+
+result_BS_100_cons_ordered <- result_BS_100_cons[order(result_BS_100_cons$GeneID.1), ]
+
+```
+
+```{r bs_write, eval=FALSE}
+
+write.csv(result_BS_sign_filtered, "../../../results_summary_200514/summary_results_BS_sign_soft_filtered.csv")
+
+write.csv(result_BS_100_cons_ordered, "../../../results_summary_200514/result_BS_100_cons_ordered.csv")
+
+
+```
+
+
+```{r bs_check_data}
+#Make sure all data frames are correct: 
+summary(result_BS) #4150
+summary(result_BS_sign_filtered) #41
+summary(result_BS_nonsign) #4105
+summary(result_BS_100_cons_ordered) #100
+
+```
+
+#Branch-site candidate genes under positive selection
+
+1) Assumption 1 - normaldistribution
+2) Assumption 2 - equal variances  - violated - t.test with default value, allows for non-equal variance and different sample sizes, uses the Welch two sample test that recalculate the DF (usually lower, thereby more conservative)
+3) Assumption 3 - random sampling - violated - should do randomization test instead
+
+Rank-based non-parametric test (Mann-Whitney-Wilcoxson-test)is a less computationally intensive randomisation test. Where the samples are ranked and the rank-sum for each group is calculated. The mixure of ranks should be equal in both groups. Compare the smaller rank sum to a probablility distribution of rank sums (based on randomisations) and test.
+wilcox.test() in r - performes a signed rank test if paired = True, otherwise a Wilcoxon rank sum test (equivalent to the Mann-Whitney test)
+
+```{r bs_analysis_pos_sel}
+
+#differ between tree length
+t.test(result_BS_sign_filtered$tree_length, result_BS_nonsign$tree_length)
+wilcox.test(result_BS_sign_filtered$tree_length, result_BS_nonsign$tree_length)
+
+#differ between gc-content
+t.test(result_BS_sign_filtered$gc_all, result_BS_nonsign$gc_all)
+wilcox.test(result_BS_sign_filtered$gc_all, result_BS_nonsign$gc_all, conf.int = T)
+
+#differ in alignment length
+t.test(result_BS_sign_filtered$al_length, result_BS_nonsign$al_length)
+wilcox.test(result_BS_sign_filtered$al_length, result_BS_nonsign$al_length, conf.int = T)
+
+#Exclude outlier, length > 20 000nt, even more significant
+t.test(result_BS_sign_filtered$al_length[result_BS_sign_filtered$al_length < 20000], result_BS_nonsign$al_length)
+wilcox.test(result_BS_sign_filtered$al_length[result_BS_sign_filtered$al_length < 20000], result_BS_nonsign$al_length)
+
+
+```
+
+```{r bs_pos_sel_plot, echo=FALSE}
+par(mfrow=c(3,1))
+
+hist(result_BS_sign_filtered$tree_length, breaks = 50, col = "red", main="Treelength pos sel vs the rest")
+hist(result_BS_nonsign$tree_length, breaks = 50, col = "blue")
+boxplot(result_BS_sign_filtered$tree_length, result_BS_nonsign$tree_length)
+
+
+hist(result_BS_sign_filtered$gc_all, breaks = 50, col = "red", main = "GC-content pos sel vs the rest")
+hist(result_BS_nonsign$gc_all, breaks = 50, col = "blue")
+boxplot(result_BS_sign_filtered$gc_all, result_BS_nonsign$gc_all)
+
+
+hist(result_BS_sign_filtered$al_length, breaks = 50, col = "red", main = "Alignment length pos sel vs the rest")
+hist(result_BS_nonsign$al_length, breaks = 50, col = "blue")
+boxplot(result_BS_sign_filtered$al_length, result_BS_nonsign$al_length)
+
+```
+
+
+#Correlation between evolutionary rate and composition
+
+```{r bs_test_conserved}
+
+boxplot(result_BS_100_cons_ordered$al_length, result_BS$al_length)
+t.test(result_BS_100_cons_ordered$al_length, result_BS$al_length)
+wilcox.test(result_BS_100_cons_ordered$al_length, result_BS$al_length)
+
+boxplot(result_BS_100_cons_ordered$gc_all, result_BS$gc_all)
+t.test(result_BS_100_cons_ordered$gc_all, result_BS$gc_all)
+wilcox.test(result_BS_100_cons_ordered$gc_all, result_BS$gc_all)
+
+```
+
+
+
+```{r bs_gc_data, echo=FALSE}
+
+#get gc-content from codeml in codon positions
+gc_content_unfiltered <- read.table("../../../results_summary_200514/Summary_gc_total_positions.csv", header = T)
+
+gc_content_4150 <- gc_content_unfiltered[gc_content_unfiltered$GeneID %in% result_BS$GeneID.1, ]
+
+#checking if there is a significant difference between before and after filtering
+#t.test(colMeans(gc_content_4150[,3:11]), colMeans(gc_content_unfiltered[,3:11]))
+
+
+gc_content_pos_sel <- gc_content_4150[gc_content_4150$GeneID %in% result_BS_sign_filtered$GeneID.1, ]
+
+gc_content_100_cons <- gc_content_4150[gc_content_4150$GeneID %in% result_BS_100_cons_ordered$GeneID.1, ]
+
+
+#make a new df with col means from the df above
+gc_content_colmeans <- data.frame(rbind(
+      colMeans(gc_content_4150[gc_content_4150$position == 1, 2:11]),
+      colMeans(gc_content_4150[gc_content_4150$position == 2, 2:11]),
+      colMeans(gc_content_4150[gc_content_4150$position == 3, 2:11]),
+      colMeans(gc_content_100_cons[gc_content_100_cons$position == 1,2:11]),
+      colMeans(gc_content_100_cons[gc_content_100_cons$position == 2,2:11]),
+      colMeans(gc_content_100_cons[gc_content_100_cons$position == 3,2:11]), 
+      colMeans(gc_content_pos_sel[gc_content_pos_sel$position == 1, 2:11]),
+      colMeans(gc_content_pos_sel[gc_content_pos_sel$position == 2, 2:11]),
+      colMeans(gc_content_pos_sel[gc_content_pos_sel$position == 3, 2:11])))
+gc_content_colmeans$dataset <- as.factor(rep(c("Aligned dataset", "Conserved dataset", "Pos sel cand"), each = 3))
+
+
+#get sd for mean CG-content
+gc_content_colmeans$sd_all <- c(
+      sd(gc_content_4150[gc_content_4150$position == 1, 3]),
+      sd(gc_content_4150[gc_content_4150$position == 2, 3]),
+      sd(gc_content_4150[gc_content_4150$position == 3, 3]),
+      sd(gc_content_100_cons[gc_content_100_cons$position == 1,3]),
+      sd(gc_content_100_cons[gc_content_100_cons$position == 2,3]),
+      sd(gc_content_100_cons[gc_content_100_cons$position == 3,3]), 
+      sd(gc_content_pos_sel[gc_content_pos_sel$position == 1, 3]),
+      sd(gc_content_pos_sel[gc_content_pos_sel$position == 2, 3]),
+      sd(gc_content_pos_sel[gc_content_pos_sel$position == 3, 3]))
+
+#get sd for CG-content in L.sinapis
+gc_content_colmeans$sd_L_sin <- c(
+      sd(gc_content_4150[gc_content_4150$position == 1, "L_sinapis"]),
+      sd(gc_content_4150[gc_content_4150$position == 2, "L_sinapis"]),
+      sd(gc_content_4150[gc_content_4150$position == 3, "L_sinapis"]),
+      sd(gc_content_100_cons[gc_content_100_cons$position == 1,"L_sinapis"]),
+      sd(gc_content_100_cons[gc_content_100_cons$position == 2,"L_sinapis"]),
+      sd(gc_content_100_cons[gc_content_100_cons$position == 3,"L_sinapis"]), 
+      sd(gc_content_pos_sel[gc_content_pos_sel$position == 1, "L_sinapis"]),
+      sd(gc_content_pos_sel[gc_content_pos_sel$position == 2, "L_sinapis"]),
+      sd(gc_content_pos_sel[gc_content_pos_sel$position == 3, "L_sinapis"]))
+
+#get median for average gc content
+gc_content_colmeans$median <- c(
+      median(gc_content_4150[gc_content_4150$position == 1, 3]),
+      median(gc_content_4150[gc_content_4150$position == 2, 3]),
+      median(gc_content_4150[gc_content_4150$position == 3, 3]),
+      median(gc_content_100_cons[gc_content_100_cons$position == 1,3]),
+      median(gc_content_100_cons[gc_content_100_cons$position == 2,3]),
+      median(gc_content_100_cons[gc_content_100_cons$position == 3,3]), 
+      median(gc_content_pos_sel[gc_content_pos_sel$position == 1, 3]),
+      median(gc_content_pos_sel[gc_content_pos_sel$position == 2, 3]),
+      median(gc_content_pos_sel[gc_content_pos_sel$position == 3, 3]))
+
+
+write.table(gc_content_colmeans, file = "Result_dnds_ms_files/summary_gc_datasets.table", sep = " ")
+
+
+```
+
+```{r bs_gc_test}
+#script to test difference in gc content between cds and aligned geneset
+#get data
+gc_content_cds_aligned <- read.csv2("result_files/gc_content_cds_aligned.csv", header = T)
+gc_content_cds_aligned$branch <- c("B_mori", "C_cecrops", "D_plexippus", "H_melpomene", "L_accius", "L_sinapis", "P_machaon", "P_sennae")
+
+colMeans(gc_content_cds_aligned[,1:8])
+#Coding_cds Coding_align     X1st_cds   X1st.align     X2nd_cds   X2nd.align     X3rd_cds   X3rd.align 
+#46.59250     45.71500     51.34625     51.15250     40.28625     39.11375     48.15000     46.87500 
+
+apply(gc_content_cds_aligned[,1:8], MARGIN = 2, FUN = sd)
+#Coding_cds Coding_align     X1st_cds   X1st.align     X2nd_cds   X2nd.align     X3rd_cds   X3rd.align 
+#1.5144141    1.5670810    0.7000599    0.6529439    0.5112712    0.1462813    3.7624270    3.9830283 
+
+#test
+wilcox.test(gc_content_cds_aligned$Coding_cds, gc_content_cds_aligned$Coding_align)
+wilcox.test(gc_content_cds_aligned$Coding_cds, gc_content_cds_aligned$Coding_align, paired = T)
+
+wilcox.test(gc_content_cds_aligned$X1st_cds, gc_content_cds_aligned$X1st.align)
+wilcox.test(gc_content_cds_aligned$X1st_cds, gc_content_cds_aligned$X1st.align, paired = T)
+
+wilcox.test(gc_content_cds_aligned$X2nd_cds, gc_content_cds_aligned$X2nd.align)
+wilcox.test(gc_content_cds_aligned$X2nd_cds, gc_content_cds_aligned$X2nd.align, paired = T)
+
+wilcox.test(gc_content_cds_aligned$X3rd_cds, gc_content_cds_aligned$X3rd.align)
+wilcox.test(gc_content_cds_aligned$X3rd_cds, gc_content_cds_aligned$X3rd.align, paired = T)
+
+#difference betweeen positions in teh aligned geneset
+kruskal.test(gc_content_cds_aligned[, c(2,4,6,8)])
+
+#get data for different genesets to analyse differencies between positions
+gc_content_genesets <- read.table("result_files/Result_dnds_ms_files/summary_gc_datasets.table", header = T)
+#compare aligned and conserved
+wilcox.test(as.numeric(gc_content_genesets[1, 3:10]), as.numeric(gc_content_genesets[4, 3:10]))
+wilcox.test(as.numeric(gc_content_genesets[2, 3:10]), as.numeric(gc_content_genesets[5, 3:10]))
+wilcox.test(as.numeric(gc_content_genesets[3, 3:10]), as.numeric(gc_content_genesets[6, 3:10]))
+
+#compare aligned and pos sel
+wilcox.test(as.numeric(gc_content_genesets[1, 3:10]), as.numeric(gc_content_genesets[7, 3:10]))
+wilcox.test(as.numeric(gc_content_genesets[2, 3:10]), as.numeric(gc_content_genesets[8, 3:10]))
+wilcox.test(as.numeric(gc_content_genesets[3, 3:10]), as.numeric(gc_content_genesets[9, 3:10]))
+
+
+```
+
+
+```{r bs_gc_plot, echo=FALSE}
+
+gc_content_colmeans <- read.table(file = "Result_dnds_ms_files/summary_gc_datasets.table", sep = " ", header=T)
+
+plot(gc_content_colmeans[gc_content_colmeans$position == 1, 2:10])
+
+boxplot(gc_content_colmeans[gc_content_colmeans$position == 3 & gc_content_colmeans$dataset == "Aligned dataset", 2:10])
+
+gc_content_colmeans$position <- as.factor(gc_content_colmeans$position)
+levels(gc_content_colmeans$position)
+levels(gc_content_colmeans$position) <- c("First", "Second", "Third")
+
+gc_colours <- nord(n=3, "red_mountain")
+
+#red_mountain colours
+ggplot(gc_content_colmeans, (aes(x = gc_content_colmeans$dataset, 
+                                 y = gc_content_colmeans$L_sinapis, 
+                                 group = gc_content_colmeans$position))) +
+      geom_bar(stat = "identity", 
+              position = position_dodge(0.7),
+              aes(fill = gc_content_colmeans$position,
+                  colour = "grey"),
+              size=0.2,
+              width = 0.7) +
+        geom_errorbar(position = position_dodge(0.7),
+                      size=LINE_SIZE,
+                      width=0.4,
+                    aes(ymin = c(gc_content_colmeans$L_sinapis - gc_content_colmeans$sd_L_sin), 
+                        ymax = c(gc_content_colmeans$L_sinapis + gc_content_colmeans$sd_L_sin))) +
+      scale_fill_manual(values = gc_colours,
+                         guide_legend(title = "Codon position")) +
+      scale_color_manual(values = "black", 
+                          guide = FALSE) +
+      labs(x = "", 
+           y = expression("GC-content ("~italic(L)~". "~italic(sinapis)~")")) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 7)) +
+      scale_x_discrete(labels = c("Aligned", "Conserved", expression("Pos sel ("~italic(Leptidea)~")"))) +
+      theme(axis.text.x = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            axis.text.y = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            axis.title.y = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            axis.line = element_line(colour = "black",
+                                     size = LINE_SIZE),
+            axis.ticks = element_line(size = LINE_SIZE, 
+                                      colour = "black"),
+            panel.grid.major = element_blank(), 
+            panel.grid.minor = element_blank(),
+            panel.background = element_blank(),
+            legend.text = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            legend.title = element_text(size = TXT_SIZE,
+                                       colour = "black"))
+
+ggsave("Figure_ms/gc_content_dataset_red_mount_sinapis.pdf", device = "pdf", width = 10, height = 6)
+ggsave("Figure_ms/gc_content_dataset_red_mount_sinapis.jpg", device = "jpg", width = 10, height = 6)
+
+#grouping by position
+ggplot(gc_content_colmeans, (aes(x = gc_content_colmeans$position, 
+                                 y = gc_content_colmeans$all, 
+                                 group = gc_content_colmeans$dataset))) +
+      geom_bar(stat = "identity", 
+              position = position_dodge(),
+              aes(fill = gc_content_colmeans$dataset,
+                  colour = "grey")) +
+      geom_errorbar(position = position_dodge(), 
+                    aes(ymin = c(gc_content_colmeans$all - gc_content_colmeans$sd_all), 
+                        ymax = c(gc_content_colmeans$all + gc_content_colmeans$sd_all))) +
+      scale_fill_viridis(discrete = T,
+                         guide_legend(title = "Dataset")) +
+      scale_color_manual(values = "black", 
+                          guide = FALSE) +
+      labs(x = "Codon position", 
+           y = "GC-content") +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 10)) +
+      theme(axis.text.x = element_text(angle = 0, 
+                                       size = 10,
+                                       colour = "black"),
+            axis.text.y = element_text(size = 10,
+                                       colour = "black"),
+            axis.title.y = element_text(size = 10),
+            axis.line = element_line(colour = "black",
+                                     size = 0.2),
+            axis.ticks.length = unit(0.1, "cm"),
+            axis.ticks = element_line(size = 0.2,),
+            panel.grid.major = element_blank(), 
+            panel.grid.minor = element_blank(),
+            panel.background = element_blank()
+            )
+
+
+
+```
+
+
+
+
+
+
+
+
+

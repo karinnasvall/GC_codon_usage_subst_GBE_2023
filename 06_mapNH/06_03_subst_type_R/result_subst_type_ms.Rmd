@@ -1,0 +1,1100 @@
+---
+title: "Result_subst_type_dnds"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Result from mapNH 
+
+#Infering evolutionary rate in different sunbstitution types
+
+```{r setup2, echo = F}
+library(ggplot2)
+library(viridis)
+library(rcartocolor)
+library(nord)
+library(ggpubr)
+library(tidyverse)
+library(gridExtra)
+library(Hmisc)
+library(lme4)
+library(plyr)
+library(dplyr)
+library(tidyverse)
+library(magrittr)
+library("tidyr")
+library(forcats)
+#devtools::install_github("thomasp85/patchwork")
+library(patchwork)
+
+date()
+sessionInfo()
+
+branch_colours <- nord(n = 8, palette = "red_mountain")
+branch_colours_alpha <- nord(n = 8, palette = "red_mountain", alpha = 0.1)
+
+```
+
+
+##Substituion type analysis
+Questions:
+Difference in evolutionary rate betweeen branches?
+Difference in evolutionary rate between types of substitutions?
+Difference in dnds, dn and ds between types and branches
+Covariation with GC?
+
+```{r subst_type_data, echo = F}
+#load data from tip branch result from mapNH
+
+result_files <- list.files(path="../../../../Subst_type/data/result_mapNH_csv", pattern="*tip.csv", full.names=TRUE, recursive=FALSE)
+names(result_files) <- result_files
+
+for (i in seq(1,length(result_files), 1)) {
+
+df_name <- gsub("../../../../Subst_type/data/result_mapNH_csv/|result_|_tip.csv", "", names(result_files[i]))
+assign(df_name, read.table(result_files[i], header = T))
+
+}
+
+#data_long <- gather(olddata_wide, condition, measurement, control:cond2, factor_key=TRUE)
+dN_X_S_S_long <- gather(dN_X_S_S, branch, dn, 2:9)
+dN_X_S_S_long$type <- as.factor(c("s_s"))
+
+dN_X_S_W_long <- gather(dN_X_S_W, branch, dn, 2:9)
+dN_X_S_W_long$type <- as.factor(c("s_w"))
+
+dN_X_W_S_long <- gather(dN_X_W_S, branch, dn, 2:9)
+dN_X_W_S_long$type <- as.factor(c("w_s"))
+
+dN_X_W_W_long <- gather(dN_X_W_W, branch, dn, 2:9)
+dN_X_W_W_long$type <- as.factor(c("w_w"))
+
+dS_X_S_S_long <- gather(dS_X_S_S, branch, ds, 2:9)
+dS_X_S_S_long$type <- as.factor(c("s_s"))
+
+dS_X_S_W_long <- gather(dS_X_S_W, branch, ds, 2:9)
+dS_X_S_W_long$type <- as.factor(c("s_w"))
+
+dS_X_W_S_long <- gather(dS_X_W_S, branch, ds, 2:9)
+dS_X_W_S_long$type <- as.factor(c("w_s"))
+
+dS_X_W_W_long <- gather(dS_X_W_W, branch, ds, 2:9)
+dS_X_W_W_long$type <- as.factor(c("w_w"))
+
+
+subst_type_unfiltered <- merge(rbind(dN_X_S_S_long, dN_X_S_W_long, dN_X_W_S_long, dN_X_W_W_long), rbind(dS_X_S_S_long, dS_X_S_W_long, dS_X_W_S_long, dS_X_W_W_long))
+
+#calculate dnds
+subst_type_unfiltered$dnds <- subst_type_unfiltered$dn/subst_type_unfiltered$ds
+
+#remove objects from workspace due to memory issue
+rm(list = ls(pattern = "dS"))
+rm(list = ls(pattern = "dN"))
+
+#get alignment length in codons after gap removal
+al_length <- read.table("data/mapNH_al_length.table", header = T)
+subst_type_length <- merge(subst_type_unfiltered, al_length, by = "gene_ID")
+
+#filter by length, only keep >= 100 codons, 3555 genes left
+subst_type <- subset(subst_type_length, subst_type_length$length >= 100)
+
+write.table(subst_type, "data/subst_type.table", sep = " ")
+
+###
+# branch model mapNH
+temp_bmodel <- read.table("data/result_branch_mapNH_run.table", header = T)
+#filter 
+temp_bmodel_filtered <- temp_bmodel[temp_bmodel$gene_ID %in% subst_type$gene_ID, ]
+temp_bmodel_long <- gather(temp_bmodel_filtered, key = "branch", value = "value", 3:10)
+bmodel_long <- spread(temp_bmodel_long, key = "subst", value = "value")
+colnames(bmodel_long) <- c("gene_ID", "branch", "dn", "ds")
+#calculate dnds
+bmodel_long$dnds <- (bmodel_long$dn/bmodel_long$ds)
+
+
+#add gc content?
+gc_content_unfiltered <- read.table("data/Summary_gc_total_positions.csv", header = T)
+
+gc_content <- gc_content_unfiltered[gc_content_unfiltered$GeneID %in% subst_type$gene_ID, ]
+gc_long <- gather(gc_content, key = branch, value = gc, 4:11)
+gc_long_position <- spread(gc_long[,c(1,2,4,5)], position, gc)
+colnames(gc_long_position) <- c("GeneID", "branch", "gc_1", "gc_2","gc_3")
+
+#write result tables dnds, dn and ds per branch
+write.table(merge(aggregate(subst_type$dnds, list(subst_type$branch), summary), aggregate(subst_type$dnds, list(subst_type$branch), sd), by = "Group.1"), "result_files/dnds_branch_mean_sd.table", col.names = c("Branch", "dnds.Min.", "dnds.1st Qu.", "dnds.Median", "dnds.Mean", "dnds.3rd Qu.", "dnds.Max.", "dnds.sd"))
+
+#dn
+write.table(merge(aggregate(subst_type$dn, list(subst_type$branch), summary), aggregate(subst_type$dn, list(subst_type$branch), sd), by = "Group.1"), "result_files/dn_branch_mean_sd.table", col.names = c("Branch", "dn.Min.", "dn.1st Qu.", "dn.Median", "dn.Mean", "dn.3rd Qu.", "dn.Max.", "dn.sd"))
+
+#ds
+write.table(merge(aggregate(subst_type$ds, list(subst_type$branch), summary), aggregate(subst_type$ds, list(subst_type$branch), sd), by = "Group.1"), "result_files/ds_branch_mean_sd.table", col.names = c("Branch", "ds.Min.", "ds.1st Qu.", "ds.Median", "ds.Mean", "ds.3rd Qu.", "ds.Max.", "ds.sd"))
+
+
+
+#gc_content, write table average per branch and position
+write.table(aggregate(gc_long_position[,3:5], list(gc_long_position$branch), summary), "result_files/gc_content_branch_mapNH_mean.table")
+write.table(aggregate(gc_long_position[,3:5], list(gc_long_position$branch), sd), "result_files/gc_content_branch_mapNH_sd.table")
+
+#gc-content average
+summary(gc_long_position[,3:5])
+sd(gc_long_position[,3])
+sd(gc_long_position[,4])
+sd(gc_long_position[,5])
+
+
+write.table(aggregate(gc_long_position[,3:5], list(gc_long_position$branch), summary), "result_files/gc_content_branch_mapNH_mean.table")
+
+write.table(aggregate(gc_long_position[,3:5], list(gc_long_position$branch), sd), "result_files/gc_content_branch_mapNH_sd.table")
+
+#length
+write(summary(subst_type$length), "result_files/al_length_codon_mean_sd.txt")
+
+
+```
+
+
+
+```{r subst_type_gccons_vs_not_data, echo=FALSE}
+#new df with subst classes and gc-content
+#read the data if not in environment
+subst_type <- read.table("data/subst_type.table", header = T)
+
+#get only gc-conservative OBS first calculate dn and ds separately then calulate dnds form that (not exact dn and ds are themselves ratios, but...)
+temp_gccons <- data.frame((subst_type[subst_type$type == "s_s",4:5] + subst_type[subst_type$type == "w_w",4:5])/2)
+#get dnds
+temp_gccons$dnds <- (temp_gccons$dn/temp_gccons$ds)
+#get id and branch (type does not matter, the order is the same), add gc info
+temp_gccons <- cbind(subst_type[subst_type$type == "s_s",1:2], temp_gccons, gc_long_position[, 3:5])
+#add a column with new type
+temp_gccons$type <- c("gc_cons")
+
+temp_s_w <- data.frame(subst_type[subst_type$type == "s_w",4:6])
+temp_s_w <- cbind(subst_type[subst_type$type == "s_s",1:2], temp_s_w, gc_long_position[, 3:5])
+temp_s_w$type <- c("s_w")
+
+temp_w_s <- data.frame(subst_type[subst_type$type == "w_s",4:6])
+temp_w_s <- cbind(subst_type[subst_type$type == "s_s",1:2], temp_w_s, gc_long_position[, 3:5])
+temp_w_s$type <- c("w_s")
+
+#add branch model result to compare with the other subst classes
+#first add gc and subst class column
+bmodel_long <- cbind(bmodel_long, gc_long_position[,3:5])
+bmodel_long$type <- c("all")
+
+subst_type_gccons_tot <- rbind(temp_gccons, temp_s_w, temp_w_s, bmodel_long)
+
+write.table(subst_type_gccons_tot, file = "data/subst_type_gccons_tot_gccontent.table", sep = " ")
+
+write.table(merge(aggregate(subst_type_gccons_tot$dnds, list(subst_type_gccons_tot$branch, subst_type_gccons_tot$type), summary), aggregate(subst_type_gccons_tot$dnds, list(subst_type_gccons_tot$branch, subst_type_gccons_tot$type), sd), by = c("Group.1", "Group.2")), "result_files/dnds_branch_mean_sd_type.table", col.names = c("Branch", "Type", "dnds.Min.", "dnds.1st Qu.", "dnds.Median", "dnds.Mean", "dnds.3rd Qu.", "dnds.Max.", "dnds.sd"))
+
+write.table(merge(aggregate(subst_type_gccons_tot$dn, list(subst_type_gccons_tot$branch, subst_type_gccons_tot$type), summary), aggregate(subst_type_gccons_tot$dn, list(subst_type_gccons_tot$branch, subst_type_gccons_tot$type), sd), by = c("Group.1", "Group.2")), "result_files/dn_branch_mean_sd_type.table", col.names = c("Branch", "Type", "dn.Min.", "dn.1st Qu.", "dn.Median", "dn.Mean", "dn.3rd Qu.", "dn.Max.", "dn.sd"))
+
+write.table(merge(aggregate(subst_type_gccons_tot$ds, list(subst_type_gccons_tot$branch, subst_type_gccons_tot$type), summary), aggregate(subst_type_gccons_tot$ds, list(subst_type_gccons_tot$branch, subst_type_gccons_tot$type), sd), by = c("Group.1", "Group.2")), "result_files/ds_branch_mean_sd_type.table", col.names = c("Branch", "Type", "ds.Min.", "ds.1st Qu.", "ds.Median", "ds.Mean", "ds.3rd Qu.", "ds.Max.", "ds.sd"))
+
+#remove temp files
+rm(list = ls(pattern = "temp"))
+
+```
+
+```{r subst_type_gccons_test}
+
+#difference between gc-conservative dnds and total dnds, wilcox non-parametric test
+wilcox.test(subst_type_gccons_tot$dnds[subst_type_gccons_tot$type == "gc_cons"], subst_type_gccons_tot$dnds[subst_type_gccons_tot$type == "all"], paired = T)
+#V = 231265322, p-value < 2.2e-16
+
+
+```
+
+```{r subst_type_corr_gc_wilcox}
+
+#get data if not in environment
+subst_type_gccons_tot <- read.table(file = "data/subst_type_gccons_tot_gccontent.table", sep = " ")
+
+
+#list of dataframes to run separate correlations and correlation test on, 32 for each branch and type
+#using rcorr from library(Hmisc), which returns a matrix of corr coef and another matrix of p-values
+#make sure that the list_branch_type and the gives the same order!!!!
+list_branch_type <- ls(split(subst_type_gccons_tot, list(subst_type_gccons_tot$type, subst_type_gccons_tot$branch)))
+
+for (i in seq(1,length(list_branch_type), 1)) {
+
+write(list_branch_type[i], file = "result_files/correlation_branch_type_gc_200929.txt", append = T)
+capture.output(rcorr(as.matrix(split(subst_type_gccons_tot, list(subst_type_gccons_tot$branch, subst_type_gccons_tot$type))[[i]][3:8])), file = "result_files/correlation_branch_type_gc_200929.txt", append = T)
+  
+}
+
+#spearman
+for (i in seq(1,length(list_branch_type), 1)) {
+
+write(list_branch_type[i], file = "result_files/correlation_branch_type_gc_200929_spearman.txt", append = T)
+capture.output(rcorr(as.matrix(split(subst_type_gccons_tot, list(subst_type_gccons_tot$branch, subst_type_gccons_tot$type))[[i]][3:8]), type = "spearman"), file = "result_files/correlation_branch_type_gc_200929_spearman.txt", append = T)
+  
+}
+
+
+#after log transformation - no difference
+for (i in seq(1,length(list_branch_type), 1)) {
+
+write(list_branch_type[i], file = "result_files/correlation_branch_type_gc_log.txt", append = T)
+capture.output(rcorr(as.matrix(split(subst_type_gccons_tot_log, list(subst_type_gccons_tot_log$branch, subst_type_gccons_tot_log$type))[[i]][4:9])), file = "result_files/correlation_branch_type_gc_log.txt", append = T)
+  
+}
+
+
+#test Wilcox paired for difference in dnds between all and gc-cons
+
+list_branch <- ls(split(subst_type_gccons_tot, subst_type_gccons_tot$branch))
+
+
+for (b in seq(1,length(list_branch), 1)) {
+  write(list_branch[b], file = "result_files/wilcox_pairwise_branch_diff_all_gc_cons.txt", append = T)
+  write((mean(subst_type_gccons_tot$dnds[subst_type_gccons_tot$type == "all" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T) - mean(subst_type_gccons_tot$dnds[subst_type_gccons_tot$type == "gc_cons" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T)), file = "result_files/wilcox_pairwise_branch_diff_all_gc_cons.txt", append = T)
+  capture.output(wilcox.test(subst_type_gccons_tot$dnds[subst_type_gccons_tot$type == "gc_cons" & subst_type_gccons_tot$branch == list_branch[b]], subst_type_gccons_tot$dnds[subst_type_gccons_tot$type == "all" & subst_type_gccons_tot$branch == list_branch[b]], paired = T), file = "result_files/wilcox_pairwise_branch_diff_all_gc_cons.txt", append = T)
+
+  }
+
+for (b in seq(1,length(list_branch), 1)) {
+  write(list_branch[b], file = "result_files/wilcox_pairwise_branch_ds_diff_all_gc_cons.txt", append = T)
+  write((mean(subst_type_gccons_tot$ds[subst_type_gccons_tot$type == "all" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T) - mean(subst_type_gccons_tot$ds[subst_type_gccons_tot$type == "gc_cons" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T)), file = "result_files/wilcox_pairwise_branch_ds_diff_all_gc_cons.txt", append = T)
+  capture.output(wilcox.test(subst_type_gccons_tot$ds[subst_type_gccons_tot$type == "gc_cons" & subst_type_gccons_tot$branch == list_branch[b]], subst_type_gccons_tot$ds[subst_type_gccons_tot$type == "all" & subst_type_gccons_tot$branch == list_branch[b]], paired = T), file = "result_files/wilcox_pairwise_branch_ds_diff_all_gc_cons.txt", append = T)
+
+}
+
+for (b in seq(1,length(list_branch), 1)) {
+  write(list_branch[b], file = "result_files/wilcox_pairwise_branch_dn_diff_all_gc_cons.txt", append = T)
+  write((mean(subst_type_gccons_tot$dn[subst_type_gccons_tot$type == "all" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T) - mean(subst_type_gccons_tot$dn[subst_type_gccons_tot$type == "gc_cons" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T)), file = "result_files/wilcox_pairwise_branch_dn_diff_all_gc_cons.txt", append = T)
+  capture.output(wilcox.test(subst_type_gccons_tot$dn[subst_type_gccons_tot$type == "gc_cons" & subst_type_gccons_tot$branch == list_branch[b]], subst_type_gccons_tot$dn[subst_type_gccons_tot$type == "all" & subst_type_gccons_tot$branch == list_branch[b]], paired = T), file = "result_files/wilcox_pairwise_branch_dn_diff_all_gc_cons.txt", append = T)
+
+}
+
+
+
+#diff w->s, s->w
+for (b in seq(1,length(list_branch), 1)) {
+  write(list_branch[b], file = "result_files/wilcox_pairwise_branch_diff_s_w_vs_w_s.txt", append = T)
+  write((mean(subst_type_gccons_tot$dnds[subst_type_gccons_tot$type == "s_w" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T) - mean(subst_type_gccons_tot$dnds[subst_type_gccons_tot$type == "w_s" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T)), file = "result_files/wilcox_pairwise_branch_diff_s_w_vs_w_s.txt", append = T)
+  capture.output(wilcox.test(subst_type_gccons_tot$dnds[subst_type_gccons_tot$type == "s_w" & subst_type_gccons_tot$branch == list_branch[b]], subst_type_gccons_tot$dnds[subst_type_gccons_tot$type == "w_s" & subst_type_gccons_tot$branch == list_branch[b]], paired = T), file = "result_files/wilcox_pairwise_branch_diff_s_w_vs_w_s.txt", append = T)
+
+  }
+
+#diff ds w->s, s->w
+for (b in seq(1,length(list_branch), 1)) {
+  write(list_branch[b], file = "result_files/wilcox_pairwise_branch_ds_diff_s_w_vs_w_s.txt", append = T)
+  write((mean(subst_type_gccons_tot$ds[subst_type_gccons_tot$type == "s_w" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T) - mean(subst_type_gccons_tot$ds[subst_type_gccons_tot$type == "w_s" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T)), file = "result_files/wilcox_pairwise_branch_ds_diff_s_w_vs_w_s.txt", append = T)
+  capture.output(wilcox.test(subst_type_gccons_tot$ds[subst_type_gccons_tot$type == "s_w" & subst_type_gccons_tot$branch == list_branch[b]], subst_type_gccons_tot$ds[subst_type_gccons_tot$type == "w_s" & subst_type_gccons_tot$branch == list_branch[b]], paired = T), file = "result_files/wilcox_pairwise_branch_ds_diff_s_w_vs_w_s.txt", append = T)
+
+  }
+
+#diff dn w->s, s->w
+for (b in seq(1,length(list_branch), 1)) {
+  write(list_branch[b], file = "result_files/wilcox_pairwise_branch_dn_diff_s_w_vs_w_s.txt", append = T)
+  write((mean(subst_type_gccons_tot$dn[subst_type_gccons_tot$type == "s_w" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T) - mean(subst_type_gccons_tot$dn[subst_type_gccons_tot$type == "w_s" & subst_type_gccons_tot$branch == list_branch[b]], na.rm = T)), file = "result_files/wilcox_pairwise_branch_dn_diff_s_w_vs_w_s.txt", append = T)
+  capture.output(wilcox.test(subst_type_gccons_tot$dn[subst_type_gccons_tot$type == "s_w" & subst_type_gccons_tot$branch == list_branch[b]], subst_type_gccons_tot$dn[subst_type_gccons_tot$type == "w_s" & subst_type_gccons_tot$branch == list_branch[b]], paired = T), file = "result_files/wilcox_pairwise_branch_dn_diff_s_w_vs_w_s.txt", append = T)
+
+  }
+
+
+```
+
+Result: There is an overall significant difference between total dnds and gc-conservative dnds but looking on branchwise level it is signifiant using pairwise Wilcox test.
+
+```{r subst_type_plot}
+#get data if not in environment
+subst_type_gccons_tot <- read.table(file = "data/subst_type_gccons_tot_gccontent.table", header = T)
+subst_type_gccons_tot$branch <- as.factor(subst_type_gccons_tot$branch)
+#change order
+levels(subst_type_gccons_tot$branch)
+#[1] "B_mori"      "C_cecrops"   "D_plexippus" "H_melpomene" "L_accius"    "L_sinapis"   "P_machaon"   "P_sennae"   
+#reassign
+levels(subst_type_gccons_tot$branch) <- c("B. mori", "C. cecrops", "D. plexippus", "H. melpomene", "L. accius", "L. sinapis", "P. machaon", "P. sennae")
+
+#reorder
+subst_type_gccons_tot$branch <- factor(subst_type_gccons_tot$branch, levels=c("B. mori","P. machaon", "L. accius", "L. sinapis", "P. sennae", "C. cecrops", "D. plexippus", "H. melpomene"))
+
+
+#pdf(file = "plots/dnds_boxplot.pdf", width = 8, height = 4)
+
+TXT_SIZE=14
+#testing colours
+boxplot_dnds <- 
+  ggplot(subst_type_gccons_tot) +
+  geom_boxplot(aes(branch, dnds,
+                  fill = fct_rev(type)),
+               outlier.size = 0.2, 
+               outlier.colour = "grey") +
+  scale_y_continuous(name = expression(omega),
+                       trans = "log10", position = "right") +
+  scale_x_discrete(name = NULL) +
+  scale_fill_carto_d(palette = "Fall", direction = -1,
+                     breaks =c("all" ,"gc_cons", "s_w","w_s"),
+                     labels = c("All ", "GC-cons ", "S -> W ", "W -> S"),
+                     guide_legend(title = "Substitution class")) +
+  theme(panel.background = element_blank(), 
+        panel.grid.major.y = element_blank(),
+        axis.line.y = element_line(size = 0.2),
+        axis.line.x = element_line(size = 0.2),
+        axis.text.x = element_text(size = TXT_SIZE, colour = "black"), 
+        axis.text.y = element_text(hjust = 0, size = TXT_SIZE, colour = "black", face = "italic"),
+        axis.title = element_text(size = TXT_SIZE), 
+        legend.key = element_blank(),
+        legend.text = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            legend.title = element_text(size = TXT_SIZE,
+                                       colour = "black")) +
+  coord_flip()
+
+
+boxplot_dn <- 
+  ggplot(subst_type_gccons_tot) +
+  geom_boxplot(aes(branch, dn,
+                  fill = fct_rev(type)),
+               outlier.size = 0.2, 
+               outlier.colour = "grey") +
+  scale_y_continuous(name = expression(italic("d"[N])),
+                       trans = "log10", position = "right") +
+  scale_x_discrete(name = NULL) +
+  scale_fill_carto_d(palette = "Fall", direction = -1,
+                     breaks =c("all" ,"gc_cons", "s_w","w_s"),
+                     labels = c("All ", "GC-cons ", "S -> W ", "W -> S"),
+                     guide_legend(title = "Substitution class")) +
+  theme(panel.background = element_blank(), 
+        panel.grid.major.y = element_blank(),
+        axis.line.y = element_line(size = 0.2),
+        axis.line.x = element_line(size = 0.2),
+        axis.text.x = element_text(size = TXT_SIZE, colour = "black"), 
+        axis.text.y = element_text(size = TXT_SIZE, colour = "black", face = "italic"),
+        axis.title = element_text(size = TXT_SIZE), 
+        legend.key = element_blank(),
+        legend.text = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            legend.title = element_text(size = TXT_SIZE,
+                                       colour = "black")) +
+  coord_flip()
+
+
+
+boxplot_ds <- 
+  ggplot(subst_type_gccons_tot) +
+  geom_boxplot(aes(branch, ds,
+                  fill = fct_rev(type)),
+               outlier.size = 0.2, 
+               outlier.colour = "grey") +
+  scale_y_continuous(name = expression(italic("d"[S])),
+                       trans = "log10", position = "right") +
+  scale_x_discrete(name = NULL) +
+  scale_fill_carto_d(palette = "Fall", direction = -1,
+                     breaks =c("all" ,"gc_cons", "s_w","w_s"),
+                     labels = c("All ", "GC-cons ", "S -> W ", "W -> S"),
+                     guide_legend(title = "Substitution class")) +
+  theme(panel.background = element_blank(), 
+        panel.grid.major.y = element_blank(),
+        axis.line.y = element_line(size = 0.2),
+        axis.line.x = element_line(size = 0.2),
+        axis.text.x = element_text(size = TXT_SIZE, colour = "black"), 
+        axis.text.y = element_text(size = TXT_SIZE, colour = "black", face = "italic"),
+        axis.title = element_text(size = TXT_SIZE), 
+        legend.key = element_blank(),
+        legend.text = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            legend.title = element_text(size = TXT_SIZE,
+                                       colour = "black")) +
+  coord_flip()
+
+
+
+boxplot_dnds_dn_ds <- 
+ggarrange(boxplot_dnds, boxplot_dn+rremove("y.text"), boxplot_ds+rremove("y.text"), nrow = 1, ncol = 3, common.legend = T, legend = "top", widths = c(1.3,1,1), align = "h", labels = "auto")
+
+boxplot_dnds_dn_ds
+ggsave("plots_new/boxplot_rate_branches.pdf", plot = boxplot_dnds_dn_ds, device = "pdf", height = 8, width = 8)
+
+ggsave(plot = ggarrange(
+  boxplot_dnds, boxplot_dn+rremove("y.text"), boxplot_ds+rremove("y.text"), nrow = 1, ncol = 3, common.legend = T, legend = "bottom", widths = c(1.4,1,1), align = "h", labels = c("b", "c", "d"), size = 10), 
+  filename = "plots_new/boxplot_rate_branches_vertical_no_gc_2.pdf", device = "pdf", height = 8, width = 12)
+
+
+#get names on facets
+#branch.labs <- c("B. mori", "C. cecrops", "D. plexippus", "H. melpomene", "L. accius", "L. sinapis", "P. machaon", "P. sennae")
+#names(branch.labs) <- c("B_mori", "C_cecrops", "D_plexippus", "H_melpomene", "L_accius", "L_sinapis", "P_machaon", "P_sennae")
+```
+
+```{r gc_branch_ms}
+
+gc_mean <- 
+subst_type_gccons_tot %>%
+  select(gene_ID,branch, gc_1, gc_2, gc_3) %>%
+  unique() %>%
+  group_by(branch) %>%
+  summarise_at(vars(-gene_ID), funs(mean(., na.rm=TRUE)))
+  
+gc_sd <- 
+subst_type_gccons_tot %>%
+  select(gene_ID,branch, gc_1, gc_2, gc_3) %>%
+  unique() %>%
+  group_by(branch) %>%
+  summarise_at(vars(-gene_ID), funs(sd(., na.rm=TRUE)))
+
+gc_mean_long <- 
+  gc_mean %>%
+    pivot_longer( -branch, names_to = "position", values_to = "mean_gc")
+
+gc_mean_long <- join(gc_mean_long,
+  gc_sd %>%
+    pivot_longer( -branch, names_to = "position", values_to = "sd_gc"))
+
+#convert to percent
+gc_mean_long$mean_gc <- gc_mean_long$mean_gc*100
+gc_mean_long$sd_gc <- gc_mean_long$sd_gc*100
+
+gc_colours <- nord(n=3, "red_mountain")
+show.col(gc_colours)
+
+barplot_gc <- 
+ggplot(gc_mean_long, (aes(branch, 
+                                 mean_gc, 
+                                 group = position))) +
+      geom_bar(aes(fill = position,
+                  colour = "grey"),
+               stat = "identity", 
+               width = 0.7,
+              position = position_dodge2(reverse = TRUE, width = 0.7),
+              size=0.2) +
+      geom_errorbar(position = position_dodge2(reverse = TRUE, width = 0.7),
+                    aes(ymin=mean_gc-sd_gc, ymax=mean_gc+sd_gc),
+                    size=0.4, width=0.7) +
+      scale_fill_manual(values = gc_colours, 
+                         guide_legend(title = "Codon position"),
+                        labels = c("First", "Second", "Third")) +
+      scale_color_manual(values = "black", 
+                          guide = FALSE) +
+      labs(x = "", 
+           y = "GC-content",) +
+      scale_y_continuous(breaks = scales::pretty_breaks(n = 10), expand = c(0,0), position = "right") +
+      scale_x_discrete() +
+      theme(axis.text.y = element_text(hjust = 0, size = TXT_SIZE,
+                                       face = "italic", colour = "black"),
+            axis.text.x = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            axis.title.x = element_text(size = TXT_SIZE),
+            axis.line = element_line(colour = "black",
+                                     size = 0.2),
+            #axis.ticks.length = unit(0.1, "cm"),
+            #axis.ticks = element_line(size = 0.2,colour = "black"),
+            panel.grid.major = element_blank(), 
+            panel.grid.minor = element_blank(),
+            panel.background = element_blank(),
+            legend.position = "bottom",
+            legend.text = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            legend.title = element_text(size = TXT_SIZE,
+                                       colour = "black"),
+            plot.margin = unit(x=c(3,2.2,0,1), units = "mm")
+            ) +
+  coord_flip()
+
+figure_gc_branch_subst <- 
+ggarrange(barplot_gc,
+          ggarrange(boxplot_dnds+rremove("y.text"), boxplot_dn+rremove("y.text"), boxplot_ds+rremove("y.text"), nrow = 1, ncol = 3, common.legend = T, legend = "bottom", widths = c(1,1,1), align = "h", labels = c("c", "d", "e")), 
+          labels = c("b", ""), hjust = c(-14),
+          widths = c(1,2),
+          heights = c(1.1,1),
+          align = "h")
+          
+#figure 1
+ggsave(plot = figure_gc_branch_subst, "plots_new/figure_gc_branch_subst.pdf", device = "pdf", height = 8, width = 12)
+
+labels_gc = c("First", "Second", "Third")
+
+#gc_mean and sd corr
+gc_mean_sd <-
+  gc_mean_long %>%
+  ggplot(aes(mean_gc, sd_gc)) +
+  geom_point(aes(fill = branch, shape = position), colour = "black", size=8) +
+  stat_cor(aes(group = position), method = "spearman", cor.coef.name = "rho", size = 1, colour = "white") +
+  geom_smooth(data=gc_mean_long[gc_mean_long$position=="gc_3",], aes(mean_gc, sd_gc), colour=gc_colours[3], method = "lm", se=F, size = 1.5) +
+  scale_fill_manual(values = branch_colours) +
+  scale_shape_manual(values = c(22, 24, 21),
+                     labels = c(paste(labels_gc, "  (", "\u03C1", "=",
+                                      ggplot_build(gc_mean_sd)$data[[2]]$rr, ", p-value=", ggplot_build(gc_mean_sd)$data[[2]]$p, ")", sep = ""))) +
+  scale_y_continuous(limits = c(0,20)) +
+  scale_x_continuous(limits = c(35,55)) +
+  #scale_color_manual(values = gc_colours, 
+  #                   name = "Codon position", 
+  #                  labels = c("First", "Second", "Third")) +
+  xlab("Mean GC-content (%)") +
+  ylab("GC-content, standard deviation") +
+  guides(fill = "none",
+         shape = guide_legend(title = "Codon position",
+                              byrow = TRUE,
+                              override.aes = list(fill="light grey"))) +
+      theme(panel.background = element_blank(),
+            axis.text = element_text(size = TXT_SIZE, colour = "black"),
+            axis.title = element_text(size = TXT_SIZE, colour = "black"),
+            axis.line = element_line(colour = "black", size = 0.2),
+            axis.ticks = element_line(size = 0.2, colour = "black"),
+            legend.position=c(.2,.9),
+            legend.title = element_text(size = TXT_SIZE, colour = "black"),
+            legend.text = element_text(size = TXT_SIZE, colour = "black"),
+            legend.key = element_blank(),
+            legend.spacing.y = unit(2.5, 'mm'),
+            plot.margin = unit(c(5, 5, 5, 3), "mm"))
+
+
+#gc1 and 2 vs gc3
+gc1_2_vs_gc3 <- 
+subst_type_gccons_tot %>%
+  select(gene_ID,branch, gc_1, gc_2, gc_3) %>%
+  unique() %>%
+  ggplot(aes(((gc_1 + gc_2)/2)*100, gc_3*100)) +
+  geom_point(aes(colour = branch), alpha=0.2) +
+  #stat_cor(size = TXT_SIZE/2.8) +
+  geom_smooth(aes(colour = branch), method = "lm", se=F, size = 1.5) +
+  scale_colour_manual(values = branch_colours) +
+  xlab("GC-content in first and second codon position") +
+  ylab("GC-content in third codon position") +
+      theme(panel.background = element_blank(),
+            axis.text = element_text(size = TXT_SIZE, colour = "black"),
+            axis.title = element_text(size = TXT_SIZE, colour = "black"),
+            axis.line = element_line(colour = "black", size = 0.2),
+            axis.ticks = element_line(size = 0.2, colour = "black"),
+            legend.position = "right",
+            legend.text = element_text(size = TXT_SIZE,
+                                       colour = "black", 
+                                       face="italic"),
+            legend.title = element_blank(),
+            legend.key = element_blank())
+
+
+legend_branch <- get_legend(gc1_2_vs_gc3)
+
+ggsave(plot = ggarrange(gc_mean_sd + theme(legend.position = "none"), 
+                        corr_dnds_lm_all + rremove("x.text") + rremove("xlab") + theme(legend.position = "none"), 
+                        gc1_2_vs_gc3 + theme(legend.position = "none"), 
+                        corr_dn_lm_all + rremove("x.text") + rremove("xlab") + theme(legend.position = "none"), 
+                        legend_branch,
+                        corr_ds_lm_all + theme(legend.position = "none"), 
+                        ncol=2, nrow = 3, align = "hv"),
+       filename = "plots_new/gc_corr_subst_2col.pdf", device = "pdf", height = 12, width = 12)
+
+ggsave(plot = ggarrange(
+  ggarrange(gc_mean_sd + theme(legend.position = "none"), 
+                        gc1_2_vs_gc3 + theme(legend.position = "none"), ncol=1, nrow=2, align = "v"),
+  ggarrange(corr_dnds_lm_all + rremove("x.text") + rremove("xlab") + theme(legend.position = "none"), 
+                        corr_dn_lm_all + rremove("x.text") + rremove("xlab") + theme(legend.position = "none"), 
+                        corr_ds_lm_all + theme(legend.position = "none"), 
+                        ncol=1, nrow = 3, align = "v"),
+  ggarrange(legend_branch, ncol = 1, nrow=2),
+  ncol = 3, align = "h"),
+       filename = "plots_new/gc_corr_subst.pdf", device = "pdf", height = 12, width = 16)
+
+ggsave(plot = ggarrange(
+  ggarrange(gc_mean_sd + theme(legend.position = "none"), 
+            gc1_2_vs_gc3 + theme(legend.position = "none"),
+            legend_branch, ncol=1, nrow=3, align = "v"),
+  ggarrange(corr_dnds_lm_all + rremove("x.text") + rremove("xlab") + theme(legend.position = "none"), 
+                        corr_dn_lm_all + rremove("x.text") + rremove("xlab") + theme(legend.position = "none"), 
+                        corr_ds_lm_all + theme(legend.position = "none"), 
+                        ncol=1, nrow = 3, align = "v"),
+  ncol = 2, align = "h"),
+       filename = "plots_new/gc_corr_subst_2col.pdf", device = "pdf", height = 12, width = 12)
+
+## gc densities, supplementary
+gc_densities <- 
+subst_type_gccons_tot %>%
+  filter(type %in% "all") %>%
+  pivot_longer(c(gc_1, gc_2, gc_3), names_to = "Codon_position", values_to = "GC_content") %>%
+ggplot() +
+  geom_density(aes(GC_content, fill=branch)) +
+  geom_vline(xintercept = 0.50, colour="gray", linetype="dashed") +
+  #geom_boxplot(fill="grey", width = 0.2, colour="dark grey") +
+  scale_fill_manual(values = branch_colours) +
+  facet_grid(fct_rev(branch)~Codon_position, labeller = labeller(Codon_position=as_labeller(c("gc_1"="First codon position", "gc_2"="Second codon position", "gc_3"="Third codon position")))) +
+  scale_x_continuous(name = "GC-content",
+                     position = "top") +
+  theme_pubr() +
+  theme(strip.background = element_blank(),
+        strip.placement = "outside",
+        strip.text = element_text(size = TXT_SIZE),
+        strip.text.y = element_text(hjust = 0, face="italic", angle = 0),
+        text = element_text(size = TXT_SIZE),
+        legend.position = "none",
+        legend.text = element_text(face = "italic"),
+        legend.title = element_blank())
+
+ggsave(gc_densities, filename = "plots_new/gc_density_suppl.pdf", device = "pdf", height = 10, width = 16)
+#or with patchwork
+
+p1=gc_mean_sd + theme(legend.position = "none")
+p2=gc1_2_vs_gc3 + theme(legend.position = "none")
+p3=legend_branch
+p4=corr_dnds_lm_all + rremove("x.text") + rremove("xlab") + theme(legend.position = "none")
+p5=corr_dn_lm_all + rremove("x.text") + rremove("xlab") + theme(legend.position = "none")
+p6=corr_ds_lm_all + theme(legend.position = "none")
+
+ggsave(
+  (p1 + p4 + p2 + p5 + p3 + p6) +
+  plot_layout(ncol=2) + plot_annotation(tag_levels = list(c("a", "d", "b", "e", "c", "f"))) & theme(plot.tag = element_text(size = TXT_SIZE)),
+       filename = "plots_new/gc_corr_subst_2col.pdf", device = "pdf", height = 12, width = 12)
+
+```
+
+```{r subst_type_plot_corr}
+#correlation dnds and gc3
+corr_dnds_lm <- ggplot(subst_type_gccons_tot, aes(100*gc_3, dnds)) +
+    #geom_point() +
+    geom_smooth(aes(group = type, colour = type), method = "lm") +
+    scale_y_continuous(trans = "log10", 
+                       name = expression(log[10]*" ("~omega~")")) + 
+    scale_x_continuous(name = "GC-content at third position (%)") +
+    facet_wrap(~branch,
+               nrow = 2, 
+               ncol = 4) +
+    scale_colour_carto_d(palette = "Fall",
+                     labels = c("All", "GC-cons", "S->W", "W->S"),
+                     guide_legend(title = "Substitution\nclass")) +
+  theme(panel.background = element_blank(), 
+        panel.grid.major.y = element_blank(),
+        panel.border = element_rect(size = 0.2, fill = alpha("white", 0)),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 10, face = "italic", colour = "black"), 
+        axis.title = element_text(size = 10, colour = "black"),
+        axis.line = element_blank(),
+        axis.text = element_text(size = 10, colour = "black"),
+        legend.text = element_text(size = 10, colour = "black")) +
+  guides(color = guide_legend(direction = "horizontal",
+                              title.position = "top",
+                              title.hjust = 0.5,
+                              label.position = "bottom",
+                              keywidth = 3,
+                              keyheight = 0.8
+                              )) 
+
+#dn    
+corr_dn_lm <- ggplot(subst_type_gccons_tot, aes(100*gc_3, dn)) +
+    #geom_point() +
+    geom_smooth(aes(group = type, colour = type), method = "lm") +
+    scale_y_continuous(trans = "log10", 
+                       name = expression(log[10]*" ("*italic("d"[N])*")")) + 
+    scale_x_continuous(name = "GC-content at third position (%)") +
+    facet_wrap(~branch,
+               nrow = 2, 
+               ncol = 4) +
+    scale_colour_carto_d(palette = "Fall",
+                     labels = c("All", "GC-cons", "S->W", "W->S"),
+                     guide_legend(title = "Substitution\nclass")) +
+  theme(panel.background = element_blank(), 
+        panel.grid.major.y = element_blank(),
+        panel.border = element_rect(size = 0.2, fill = alpha("white", 0)),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 10, face = "italic", colour = "black"), 
+        axis.title = element_text(size = 10, colour = "black"),
+        axis.line = element_blank(),
+        axis.text = element_text(size = 10, colour = "black"),
+        legend.text = element_text(size = 10, colour = "black")) +
+  guides(color = guide_legend(direction = "horizontal",
+                              title.position = "top",
+                              title.hjust = 0.5,
+                              label.position = "bottom",
+                              keywidth = 3,
+                              keyheight = 0.8
+                              )) 
+
+#ds
+corr_ds_lm <- ggplot(subst_type_gccons_tot, aes(100*gc_3, ds)) +
+    #geom_point() +
+    geom_smooth(aes(group = type, colour = type), method = "lm") +
+    scale_y_continuous(trans = "log10", 
+                       name = expression(log[10]*" ("*italic("d"[S])*")")) + 
+    scale_x_continuous(name = "GC-content at third position (%)") +
+    facet_wrap(~branch,
+               nrow = 2, 
+               ncol = 4) +
+    scale_colour_carto_d(palette = "Fall",
+                     labels = c("All", "GC-cons", "S->W", "W->S"),
+                     guide_legend(title = "Substitution class")) +
+  theme(panel.background = element_blank(), 
+        panel.grid.major.y = element_blank(),
+        panel.border = element_rect(size = 0.2, fill = alpha("white", 0)),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 10, face = "italic", colour = "black"), 
+        axis.title = element_text(size = 10, colour = "black"),
+        axis.line = element_blank(),
+        axis.text = element_text(size = 10, colour = "black"),
+        legend.text = element_text(size = 10, colour = "black")) +
+  guides(color = guide_legend(direction = "horizontal",
+                              title.position = "top",
+                              title.hjust = 0.5,
+                              label.position = "bottom",
+                              keywidth = 3,
+                              keyheight = 1,
+                              override.aes = list(size = 3)
+                              )) 
+
+
+legend_lm <- get_legend(corr_ds_lm)
+corr_dnds_lm <- corr_dnds_lm + theme(legend.position = "none")
+corr_dn_lm <- corr_dn_lm + theme(legend.position = "none")
+corr_ds_lm <- corr_ds_lm + theme(legend.position = "none")
+
+gc_subst_class_lm <- 
+ggarrange(corr_dnds_lm, corr_dn_lm, corr_ds_lm, legend_lm, nrow = 2, ncol = 2, heights = c(1,1,1), labels = c("a", "b", "c"))
+
+gc_subst_class_lm
+
+ggsave("plots_new/gc_subst_class_lm_fall.pdf", plot =gc_subst_class_lm , device = "pdf", height = 8, width = 12)
+
+#with moving average
+#relationship dnds est with different types and gc3, supplementary
+#correlation dnds and gc3
+corr_dnds_loess <- ggplot(subst_type_gccons_tot, aes(100*gc_3, dnds)) +
+    #geom_point() +
+    geom_smooth(aes(group = type, colour = type), method = "loess") +
+    scale_y_continuous(trans = "log10", 
+                       name = expression(log[10]*" ("~omega~")")) + 
+    scale_x_continuous(name = "GC-content at third position (%)") +
+    facet_wrap(~branch,
+               nrow = 2, 
+               ncol = 4) +
+    scale_colour_carto_d(palette = "Fall",
+                     labels = c("All", "GC-cons", "S->W", "W->S"),
+                     guide_legend(title = "Substitution\nclass")) +
+  theme(panel.background = element_blank(), 
+        panel.grid.major.y = element_blank(),
+        panel.border = element_rect(size = 0.2, fill = alpha("white", 0)),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 10, face = "italic", colour = "black"), 
+        axis.title = element_text(size = 10, colour = "black"),
+        axis.line = element_blank(),
+        axis.text = element_text(size = 10, colour = "black"),
+        legend.text = element_text(size = 10, colour = "black")) +
+  guides(color = guide_legend(direction = "horizontal",
+                              title.position = "top",
+                              title.hjust = 0.5,
+                              label.position = "bottom",
+                              keywidth = 3,
+                              keyheight = 0.8
+                              )) 
+
+#dn    
+corr_dn_loess <- ggplot(subst_type_gccons_tot, aes(100*gc_3, dn)) +
+    #geom_point() +
+    geom_smooth(aes(group = type, colour = type), method = "loess") +
+    scale_y_continuous(trans = "log10", 
+                       name = expression(log[10]*" ("*italic("d"[N])*")")) + 
+    scale_x_continuous(name = "GC-content at third position (%)") +
+    facet_wrap(~branch,
+               nrow = 2, 
+               ncol = 4) +
+    scale_colour_carto_d(palette = "Fall",
+                     labels = c("All", "GC-cons", "S->W", "W->S"),
+                     guide_legend(title = "Substitution\nclass")) +
+  theme(panel.background = element_blank(), 
+        panel.grid.major.y = element_blank(),
+        panel.border = element_rect(size = 0.2, fill = alpha("white", 0)),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 10, face = "italic", colour = "black"), 
+        axis.title = element_text(size = 10, colour = "black"),
+        axis.line = element_blank(),
+        axis.text = element_text(size = 10, colour = "black"),
+        legend.text = element_text(size = 10, colour = "black")) +
+  guides(color = guide_legend(direction = "horizontal",
+                              title.position = "top",
+                              title.hjust = 0.5,
+                              label.position = "bottom",
+                              keywidth = 3,
+                              keyheight = 0.8
+                              )) 
+
+#ds
+corr_ds_loess <- ggplot(subst_type_gccons_tot, aes(100*gc_3, ds)) +
+    #geom_point() +
+    geom_smooth(aes(group = type, colour = type), method = "loess") +
+    scale_y_continuous(trans = "log10", 
+                       name = expression(log[10]*" ("*italic("d"[S])*")")) + 
+    scale_x_continuous(name = "GC-content at third position (%)") +
+    facet_wrap(~branch,
+               nrow = 2, 
+               ncol = 4) +
+    scale_colour_carto_d(palette = "Fall",
+                     labels = c("All", "GC-cons", "S->W", "W->S"),
+                     guide_legend(title = "Substitution class")) +
+  theme(panel.background = element_blank(), 
+        panel.grid.major.y = element_blank(),
+        panel.border = element_rect(size = 0.2, fill = alpha("white", 0)),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 10, face = "italic", colour = "black"), 
+        axis.title = element_text(size = 10, colour = "black"),
+        axis.line = element_blank(),
+        axis.text = element_text(size = 10, colour = "black"),
+        legend.text = element_text(size = 10, colour = "black")) +
+  guides(color = guide_legend(direction = "horizontal",
+                              title.position = "top",
+                              title.hjust = 0.5,
+                              label.position = "bottom",
+                              keywidth = 3,
+                              keyheight = 1,
+                              override.aes = list(size = 3)
+                              )) 
+
+
+legend_loess <- get_legend(corr_ds_loess)
+corr_dnds_loess <- corr_dnds_loess + theme(legend.position = "none")
+corr_dn_loess <- corr_dn_loess + theme(legend.position = "none")
+corr_ds_loess <- corr_ds_loess + theme(legend.position = "none")
+
+gc_subst_class_loess <- 
+ggarrange(corr_dnds_loess, corr_dn_loess, corr_ds_loess, legend_loess, nrow = 2, ncol = 2, heights = c(1,1,1), labels = c("b", "c", "d"))
+
+gc_subst_class_loess
+
+ggsave("plots_new/gc_subst_class_loess_fall.pdf", plot =gc_subst_class_loess , device = "pdf", height = 8, width = 12)
+
+
+#in one plot
+branch_colours <- nord(n = 8, palette = "red_mountain")
+branch_colours_alpha <- nord(n = 8, palette = "red_mountain", alpha = 0.1)
+
+#only significant in some
+corr_dnds_lm_all <- 
+  subst_type_gccons_tot %>%
+  filter(type %in% "all") %>%
+  ggplot(aes(100*gc_3, dnds)) +
+    geom_point(aes(colour = branch), alpha = 0.05) +
+    geom_smooth(data = subst_type_gccons_tot[subst_type_gccons_tot$branch!="P. sennae" & subst_type_gccons_tot$branch!="C. cecrops" & subst_type_gccons_tot$branch!="H. melpomene" & subst_type_gccons_tot$type=="all", ],aes(group = branch, colour = branch), method = "lm", size=1.5, se=F, linetype="dashed") +
+    geom_smooth(data = subst_type_gccons_tot[subst_type_gccons_tot$branch==c("P. sennae", "C. cecrops", "H. melpomene") & subst_type_gccons_tot$type=="all", ], aes(group = branch, colour = branch), method = "lm", size=1.5, se=F) +
+    scale_y_continuous(trans = "log10",
+                       name = expression(omega)) + 
+    scale_x_continuous(name = "GC-content at third position (%)") +
+    scale_colour_manual(values = branch_colours) +
+    scale_fill_manual(guide = "none") +
+    theme(panel.background = element_blank(),
+          axis.title = element_text(size = TXT_SIZE, colour = "black"),
+          axis.title.y = element_text(size = TXT_SIZE, colour = "black", angle = 0),
+          axis.text = element_text(size = TXT_SIZE, colour = "black"),
+          axis.line = element_line(size = 0.2, colour = "black"),
+          legend.text = element_text(size = TXT_SIZE, face = "italic", colour = "black"),
+          legend.key = element_blank(),
+          legend.title = element_blank())
+  
+  stat_cor() +
+  facet_grid(~branch)
+
+
+#dn   all are sign 
+corr_dn_lm_all <- 
+  subst_type_gccons_tot %>%
+  filter(type %in% "all") %>%
+  ggplot(aes(100*gc_3, dn)) +
+    geom_point(aes(colour = branch), alpha = 0.05) +
+    geom_smooth(aes(group = branch, colour = branch), method = "lm", size=1.5, se=F) +
+    scale_y_continuous(trans = "log10",
+                       name = expression(italic(d[N]))) + 
+    scale_x_continuous(name = "GC-content at third position (%)") +
+    scale_colour_manual(values = branch_colours) +
+    theme(panel.background = element_blank(),
+          axis.title = element_text(size = TXT_SIZE, colour = "black"),
+          axis.title.y = element_text(size = TXT_SIZE, colour = "black", angle = 0),
+          axis.text = element_text(size = TXT_SIZE, colour = "black"),
+          axis.line = element_line(size = 0.2, colour = "black"),
+          legend.text = element_text(size = TXT_SIZE, face = "italic", colour = "black"),
+          legend.key = element_blank(),
+          legend.title = element_blank()) 
+
+
+
+
+#ds, all significant
+corr_ds_lm_all <- 
+    subst_type_gccons_tot %>%
+  filter(type %in% "all") %>%
+ggplot(aes(100*gc_3, ds)) +
+    geom_point(aes(colour = branch), alpha = 0.05) +
+    geom_smooth(aes(group = branch, colour = branch), method = "lm", size=1.5, se=F) +
+    scale_y_continuous(trans = "log10",
+                       name = expression(italic(d[S]))) + 
+    scale_x_continuous(name = "GC-content at third position (%)") +
+    scale_colour_manual(values = branch_colours) +
+    theme(panel.background = element_blank(),
+          axis.title = element_text(size = TXT_SIZE, colour = "black"),
+          axis.title.y = element_text(size = TXT_SIZE, colour = "black", angle = 0),
+          axis.text = element_text(size = TXT_SIZE, colour = "black"),
+          axis.line = element_line(size = 0.2, colour = "black"),
+          legend.text = element_text(size = TXT_SIZE, face = "italic", colour = "black"),
+          legend.key = element_blank(),
+          legend.title = element_blank()) 
+
+
+#ggarrange(corr_dnds_lm_all,corr_dn_lm_all,corr_ds_lm_all, nrow = 1, common.legend = T)
+
+ggsave(plot = ggarrange(corr_dnds_lm_all + rremove("x.text") + rremove("xlab") ,corr_dn_lm_all + rremove("x.text") + rremove("xlab"),corr_ds_lm_all, ncol = 1, common.legend = T, align = "v"),
+       filename = "plots_new/subst_vs_gc.pdf", device = "pdf", height = 12, width = 4)
+
+
+```
+
+
+```{r subst_type_diff_gccons}
+#####################
+#difference between all and GC-cons per branch
+
+diff_all_gc_cons <- cbind(subst_type_gccons_tot[subst_type_gccons_tot$type=="all",c(1:2)], subst_type_gccons_tot[subst_type_gccons_tot$type=="all",]$gc_3, (subst_type_gccons_tot[subst_type_gccons_tot$type=="all", ]$dnds- subst_type_gccons_tot[subst_type_gccons_tot$type=="gc_cons", ]$dnds))
+
+colnames(diff_all_gc_cons) <- c("gene_ID", "branch", "gc_3", "dnds_all_gc_cons")
+
+ggplot(diff_all_gc_cons, aes(100*gc_3, dnds_all_gc_cons)) +
+    geom_point() +
+    geom_smooth( method = "loess") +
+    scale_y_continuous(name = expression("diff "~omega)) + 
+    scale_x_continuous(name = "GC-content at third position (%)") +
+    facet_wrap(~branch,
+               nrow = 2, 
+               ncol = 4) +
+  theme(panel.background = element_blank(), 
+        panel.grid.major.y = element_blank(),
+        panel.border = element_rect(size = 0.2, fill = alpha("white", 0)),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 10, face = "italic", colour = "black"), 
+        axis.title = element_text(size = 10, colour = "black"),
+        axis.line = element_blank(),
+        axis.text = element_text(size = 10, colour = "black"))
+```
+
+
+
+```{r subst_type_ratio}
+###
+#s-w/w-s ratio
+unique(subst_type_gccons_tot$type)
+mean(subst_type_gccons_tot[subst_type_gccons_tot$type=="s_w",]$dnds/subst_type_gccons_tot[subst_type_gccons_tot$type=="w_s",]$dnds)
+#[1] 2.091417#[1] 1.087434
+median(subst_type_gccons_tot[subst_type_gccons_tot$type=="s_w",]$dnds/subst_type_gccons_tot[subst_type_gccons_tot$type=="w_s",]$dnds)
+#[1] 1.087434
+
+mean(subst_type_gccons_tot[subst_type_gccons_tot$type=="s_w",]$dn/subst_type_gccons_tot[subst_type_gccons_tot$type=="w_s",]$dn)
+#[1] 1.886635
+median(subst_type_gccons_tot[subst_type_gccons_tot$type=="s_w",]$dn/subst_type_gccons_tot[subst_type_gccons_tot$type=="w_s",]$dn)
+#[1] 1.229047
+
+mean(subst_type_gccons_tot[subst_type_gccons_tot$type=="s_w",]$ds/subst_type_gccons_tot[subst_type_gccons_tot$type=="w_s",]$ds)
+#[1] 1.346954
+median(subst_type_gccons_tot[subst_type_gccons_tot$type=="s_w",]$ds/subst_type_gccons_tot[subst_type_gccons_tot$type=="w_s",]$ds)
+#[1] 1.194768
+
+#percent of total rates (ds)
+aggregate(subst_type_gccons_tot$ds, by=list(subst_type_gccons_tot$type), mean)$x[3]/((aggregate(subst_type_gccons_tot$ds, by=list(subst_type_gccons_tot$type), mean)$x[2]*2)+aggregate(subst_type_gccons_tot$ds, by=list(subst_type_gccons_tot$type), mean)$x[3]+aggregate(subst_type_gccons_tot$ds, by=list(subst_type_gccons_tot$type), mean)$x[4])
+#[1] 0.2576875
+aggregate(subst_type_gccons_tot$ds, by=list(subst_type_gccons_tot$type), mean)$x[4]/((aggregate(subst_type_gccons_tot$ds, by=list(subst_type_gccons_tot$type), mean)$x[2]*2)+aggregate(subst_type_gccons_tot$ds, by=list(subst_type_gccons_tot$type), mean)$x[3]+aggregate(subst_type_gccons_tot$ds, by=list(subst_type_gccons_tot$type), mean)$x[4])
+#[1] 0.2518126
+
+#new dataframe
+ratio_sw<- subst_type_gccons_tot[subst_type_gccons_tot$type=="s_w",]
+ratio_ws<- subst_type_gccons_tot[subst_type_gccons_tot$type=="w_s",]
+
+ratio_sw_ws <- cbind(ratio_sw[,c(1,2,7,8)], ratio_sw[,3:5]/(ratio_ws[,3:5]))
+ratio_sw_ws_long <- gather(data = ratio_sw_ws, key = subst, value = ratio, dn:dnds)
+
+
+
+ds_ratio_plot_nongc <- ggplot(ratio_sw_ws, aes(gc_3*100, ds)) +
+  geom_bin2d() +
+  geom_hline(yintercept = 3, colour = "#ca562c", size = 1) +
+  geom_hline(yintercept = 1, colour = "#f6edbd", size = 1) +
+  geom_smooth(colour = "#a3572c") +
+  scale_y_continuous(trans = "log10", 
+                     name = expression("Ratio "*italic(d[S]))) +
+  scale_x_continuous(name = "GC-content third position (%)") +
+  scale_fill_gradient(high = "white", low = "#b38064") +
+  facet_wrap(~branch) +
+  theme(panel.background = element_blank(),
+        panel.border = element_rect(size = 0.2, alpha(colour = "white",alpha = 0)),
+        strip.background = element_blank(),
+        strip.text = element_text(size = 10, face = "italic", colour = "black"), 
+        axis.title = element_text(size = 10, colour = "black"),
+        axis.line = element_blank(),
+        axis.text = element_text(size = 10, colour = "black"),
+        legend.text = element_text(size = 10, colour = "black"))
+
+
+
+#######
+#split violin
+#function for split violin 
+#https://stackoverflow.com/questions/35717353/split-violin-plot-with-ggplot2
+GeomSplitViolin <- ggproto("GeomSplitViolin", GeomViolin, 
+                           draw_group = function(self, data, ..., draw_quantiles = NULL) {
+  data <- transform(data, xminv = x - violinwidth * (x - xmin), xmaxv = x + violinwidth * (xmax - x))
+  grp <- data[1, "group"]
+  newdata <- plyr::arrange(transform(data, x = if (grp %% 2 == 1) xminv else xmaxv), if (grp %% 2 == 1) y else -y)
+  newdata <- rbind(newdata[1, ], newdata, newdata[nrow(newdata), ], newdata[1, ])
+  newdata[c(1, nrow(newdata) - 1, nrow(newdata)), "x"] <- round(newdata[1, "x"])
+
+  if (length(draw_quantiles) > 0 & !scales::zero_range(range(data$y))) {
+    stopifnot(all(draw_quantiles >= 0), all(draw_quantiles <=
+      1))
+    quantiles <- ggplot2:::create_quantile_segment_frame(data, draw_quantiles)
+    aesthetics <- data[rep(1, nrow(quantiles)), setdiff(names(data), c("x", "y")), drop = FALSE]
+    aesthetics$alpha <- rep(1, nrow(quantiles))
+    both <- cbind(quantiles, aesthetics)
+    quantile_grob <- GeomPath$draw_panel(both, ...)
+    ggplot2:::ggname("geom_split_violin", grid::grobTree(GeomPolygon$draw_panel(newdata, ...), quantile_grob))
+  }
+  else {
+    ggplot2:::ggname("geom_split_violin", GeomPolygon$draw_panel(newdata, ...))
+  }
+})
+
+geom_split_violin <- function(mapping = NULL, data = NULL, stat = "ydensity", position = "identity", ..., 
+                              draw_quantiles = NULL, trim = TRUE, scale = "area", na.rm = FALSE, 
+                              show.legend = NA, inherit.aes = TRUE) {
+  layer(data = data, mapping = mapping, stat = stat, geom = GeomSplitViolin, 
+        position = position, show.legend = show.legend, inherit.aes = inherit.aes, 
+        params = list(trim = trim, scale = scale, draw_quantiles = draw_quantiles, na.rm = na.rm, ...))
+}
+
+
+##4d3500", "#d19200"
+library(ggpubr)
+#b38064
+#a3572c
+#all
+ratio_violin <- 
+  ggplot(ratio_sw_ws_long[ratio_sw_ws_long$subst!="dnds", ],
+                       aes(branch, ratio, fill=subst)) +
+    geom_split_violin(size=0.2) +
+    stat_summary(fun.y = mean, fun.ymin = mean, fun.ymax = mean,
+               geom = "crossbar", 
+               width = 0.25,
+               position = position_dodge(width = .25), size = 1/2.8, show.legend = FALSE) +
+    stat_compare_means(method = "wilcox.test", label = "p.signif", label.y = 2.5) +
+    geom_hline(yintercept = 3, colour = "#ca562c", size = 1) +
+    geom_hline(yintercept = 1, colour = "#f6edbd", size = 1) +
+    scale_fill_discrete(type = c("#b38064","#236287"), 
+                        labels = c(expression(italic(d[S])), expression(italic(d[N])))) +
+    scale_y_continuous(name = "Ratio S -> W / W -> S",
+                       trans = "log10") +
+    xlab("") +
+    theme(panel.background = element_blank(),
+          axis.line = element_line(size = 0.2),
+          axis.title = element_text(size = TXT_SIZE, colour = "black"),
+          axis.ticks = element_line(size = 0.2),
+          axis.text.x = element_text(size = TXT_SIZE, colour = "black", face = "italic"),
+          axis.text.y = element_text(size = TXT_SIZE, colour = "black"),
+          legend.text = element_text(size = TXT_SIZE),
+          legend.key=element_blank(),
+          legend.title = element_blank())
+
+
+ggsave(ratio_violin, filename = "plots_new/ratio_violin.pdf", device = "pdf", height = 6, width = 12)
+ggsave(ratio_violin, filename = "plots_new/ratio_violin.jpg", device = "jpg", height = 6, width = 12)
+
+
+
+```
+
+
+

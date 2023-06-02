@@ -1,0 +1,55 @@
+  tree_length         kappa            prop0            prop1              prop2a        
+ Min.   : 2.492   Min.   :0.3454   Min.   :0.0000   Min.   :0.000000   Min.   :0.000000  
+ 1st Qu.: 5.241   1st Qu.:1.1961   1st Qu.:0.9804   1st Qu.:0.000000   1st Qu.:0.000000  
+ Median : 7.899   Median :1.3934   Median :0.9921   Median :0.005080   Median :0.000000  
+ Mean   : 9.484   Mean   :1.5072   Mean   :0.9758   Mean   :0.008757   Mean   :0.015008  
+ 3rd Qu.:11.676   3rd Qu.:1.7459   3rd Qu.:1.0000   3rd Qu.:0.013615   3rd Qu.:0.006193  
+ Max.   :27.672   Max.   :3.8572   Max.   :1.0000   Max.   :0.051940   Max.   :0.965940  
+                                                                                         
+     prop2b                w0                 w1         w2a              w2b        
+ Min.   :0.0000000   Min.   :0.000000   Min.   :1   Min.   : 1.000   Min.   : 1.000  
+ 1st Qu.:0.0000000   1st Qu.:0.001888   1st Qu.:1   1st Qu.: 1.000   1st Qu.: 1.000  
+ Median :0.0000000   Median :0.002935   Median :1   Median : 1.000   Median : 1.000  
+ Mean   :0.0004236   Mean   :0.002775   Mean   :1   Mean   : 6.336   Mean   : 6.336  
+ 3rd Qu.:0.0000125   3rd Qu.:0.003768   3rd Qu.:1   3rd Qu.: 3.807   3rd Qu.: 3.807  
+ Max.   :0.0340600   Max.   :0.004810   Max.   :1   Max.   :99.757   Max.   :99.757  
+                                                                                     
+           GeneID.1    al_length         tot_gaps          gc_all          lnl_fix      
+ NM_001043520.1: 1   Min.   : 309.0   Min.   :   0.0   Min.   :0.3416   Min.   :-19163  
+ NM_001043646.1: 1   1st Qu.: 474.0   1st Qu.:   0.0   1st Qu.:0.4035   1st Qu.: -3483  
+ NM_001043649.1: 1   Median : 595.5   Median : 105.0   Median :0.4387   Median : -2191  
+ NM_001043676.1: 1   Mean   : 770.3   Mean   : 232.3   Mean   :0.4522   Mean   : -2904  
+ NM_001043756.4: 1   3rd Qu.: 882.8   3rd Qu.: 299.2   3rd Qu.:0.4951   3rd Qu.: -1718  
+ NM_001043762.1: 1   Max.   :4920.0   Max.   :2559.0   Max.   :0.6625   Max.   : -1171  
+ (Other)       :94                                                                      
+    lnl_est            LRT            corrLRT          p.value            rank     
+ Min.   :-19163   Min.   :0.0000   Min.   :0.0000   Min.   :0.0641   Min.   :  94  
+ 1st Qu.: -3483   1st Qu.:0.0000   1st Qu.:0.0000   1st Qu.:1.0000   1st Qu.: 786  
+ Median : -2191   Median :0.0000   Median :0.0000   Median :1.0000   Median :1438  
+ Mean   : -2904   Mean   :0.1202   Mean   :0.1202   Mean   :0.9200   Mean   :1327  
+ 3rd Qu.: -1718   3rd Qu.:0.0000   3rd Qu.:0.0000   3rd Qu.:1.0000   3rd Qu.:1600  
+ Max.   : -1171   Max.   :3.4280   Max.   :3.4280   Max.   :1.0000   Max.   :3577  
+                                                                                   
+      FDR          
+ Min.   :0.003458  
+ 1st Qu.:0.015366  
+ Median :0.016340  
+ Mean   :0.017013  
+ 3rd Qu.:0.020271  
+ Max.   :0.024440  
+                   
+list(sd(result_BS_100_cons$tree_length),
++ sd(result_BS_100_cons$w0),
++ sd(result_BS_100_cons$al_length),
++ sd(result_BS_100_cons$gc_all))
+[[1]]
+[1] 5.900693
+
+[[2]]
+[1] 0.001245832
+
+[[3]]
+[1] 553.435
+
+[[4]]
+[1] 0.06382938

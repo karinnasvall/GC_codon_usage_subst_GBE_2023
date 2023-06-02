@@ -1,0 +1,28 @@
+#overlap_new.csv is retrieved from annotation <2019
+#get Dr melanogaster genenames for 4150 geneset (only 3116 have matching genename)
+sort -k2 overlap_new.csv > overlap_new_sorted.txt
+sort -k2 overlap_bmori_lsin_4150.txt | join -1 2 -2 2 - overlap_new_sorted.txt > overlap_lsin_bmor_drmel_4150.txt
+
+sort -k2 overlap_bmori_lsin_4150.txt | join -1 2 -2 2 - overlap_new_sorted.txt |wc -l
+3116
+
+#get aligned geneset input for pnther
+cut -f 3 -d " " overlap_lsin_bmor_drmel_4150.txt > input_panther_GO_aligned_geneset.txt
+
+
+#get input list for Panther
+sort -k2 overlap_pos_sel.txt |join -1 2 -2 1 -a1 - overlap_lsin_bmor_drmel_4150.txt |cut -f1,2,4 -d " " > list_sign_genenames_function.txt
+cut -f3 -d " " list_sign_genenames_function.txt |sort > input_panther_GO_sign_genes.txt
+#manually remove blanks, only 33 genes have functional annotation
+
+
+
+#most conserved 100 genes
+sort -k1 overlap_bmori_lsin_4150.txt | join -1 1 -2 1 -a1 list_most_conserved.txt - | sort -k2 | join -1 2 -2 1 -a1 - overlap_lsin_bmor_drmel_4150.txt |cut -f1,2,4 -d " " > list_most_conserved_functions.txt
+
+#get input for panther
+cut -f3 -d " " list_most_conserved_functions.txt |sort > input_panther_GO_most_conserved.txt 
+#manually remove blanks
+wc -l input_panther_GO_most_conserved.txt
+94 input_panther_GO_most_conserved.txt
+

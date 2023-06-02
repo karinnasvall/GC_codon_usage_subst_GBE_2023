@@ -1,0 +1,413 @@
+---
+title: "dnds_M0_compare_branches_methods"
+author: "KN"
+date: "2/24/2023"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup2}
+
+library(lme4)
+library(sjPlot)
+library(stargazer)
+library(ggplot2)
+library(viridis)
+library(tidyverse)
+library(gridExtra)
+library(ggpubr)
+library(nord)
+
+TXT_SIZE=14
+LINE_SIZE=0.2
+
+dnds_colour <- "#778868"
+dnds_gradient_col <- c("#b5b991", "#778868","#3d5941")
+
+
+sessionInfo()
+```
+
+## Result codeml M0 and branch models
+
+#Model M0 
+Average dnds per gene across branches
+
+Distribution of dnds in the aligned geneset using codeml Model M0. Average dnds per gene across branches.
+```{r codeml M0, echo=FALSE}
+
+#loading data from codeml M0 unfiltered and filtered
+Result_M0_r1 <- read.table("data/Model_M0/summary_results_M0run1.table", header = T)
+
+#filtered dS< 30
+Result_M0_r1_filtered <- read.table("data/Model_M0/summary_results_M0run1_filtered.table", header = T)
+
+#run2
+Result_M0_r2 <- read.table("data/Model_M0/summary_results_M0_run2.table", header = T)
+
+#filtered dS< 30
+Result_M0_r2_filtered <- read.table("data/Model_M0/summary_results_M0run2_filtered.table", header = T)
+
+###############
+#####checking correlation between runs
+cor.test(Result_M0_r1$Omega.dN.dS., Result_M0_r2$Omega.dN.dS.)
+
+
+```
+
+Very high correlation between runs, using only run1 that is more conservative resulting in 4237 genes (run 2: 4239 genes)
+
+```{r M0_result}
+
+median(Result_M0_r1_filtered$Omega.dN.dS.) #[1] 0.04037
+mean(Result_M0_r1_filtered$Omega.dN.dS.) #[1] 0.04451873
+sd(Result_M0_r1_filtered$Omega.dN.dS.) #[1] 0.02545054
+
+capture.output(summary_M0, file = "Result_tables/summary_M0.txt")
+#add sd manually
+
+```
+
+```{r M0_plot, echo=FALSE}
+
+
+#graphs of filtered M0
+hist(Result_M0_r1$Tree_len_dS, col = "Brown", main = "Tree length for dS", breaks = 100)
+hist(Result_M0_r1_filtered$Tree_len_dS, col = "Brown", main = "Tree length for dS", breaks = 100)
+
+TXT_SIZE=14
+LINE_SIZE=0.2
+fall_colours <- carto_pal(n=7, "Fall")
+#colour_dnds <- "#32324BDD"
+dnds_colour <- "#778868"
+dnds_gradient_col <- c("#b5b991", "#778868","#3d5941")
+
+ggplot(Result_M0_r1_filtered, aes(Omega.dN.dS.)) + 
+  geom_density(colour="black", fill=dnds_colour, size = 0.2) +
+  labs(x=expression(omega),
+       y="Density") +
+  theme(axis.text.x = element_text(vjust = 0.5,
+                                   size = TXT_SIZE, colour = "black"),
+        axis.title.x = element_text(margin = margin(t = 10, r = 0, b = 0, l = 0), 
+                                    size = TXT_SIZE),
+        axis.text.y = element_text(size = TXT_SIZE, colour = "black"),
+        axis.title.y = element_text(size = TXT_SIZE, 
+                                    margin = margin(t = 0, r = 10, b = 0, l = 0)),
+        panel.background = element_blank(), 
+        axis.line = element_line(size = LINE_SIZE),
+        axis.ticks = element_line(size = LINE_SIZE),
+        axis.ticks.length = unit(2, "pt"),
+        plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt")) +
+  scale_x_continuous(expand = c(0,0)) +
+  scale_y_continuous(expand = c(0,0))
+
+ggsave("Figure_ms/average_w_green.pdf", device = "pdf", width = 8, height = 6)
+
+```
+
+
+# Evolutionary rate per branch (codeml with removing gaps (clean=1))
+filtering filter out rows where any value is below/above the threshold 
+dnds < 10
+ If dS is less than 0,01 the dnds estimation is unreliable
+ If dS is > 2 risk of saturation, although some reports that codeml is rather stable to higher dS so filtering on total dS across branches 30
+
+```{r branch_data_clean, echo=FALSE}
+branch_dnds_tip <- read.table("data/result_branch_dnds_clean_tip.csv", header = T)
+
+#dS
+branch_ds_tip <- read.table("data/result_branch_ds_clean_tip.csv", header = T)
+
+#filtering
+#where the total tree length is above 30
+length(branch_ds_tip[!rowSums(branch_ds_tip[2:9]) > 30,2])
+#3060
+branch_ds_tip[rowSums(branch_ds_tip[2:9]) > 30,]
+
+branch_ds_tip_filtr30 <- branch_ds_tip[!rowSums(branch_ds_tip[2:9]) > 30,]
+
+hist(rowSums(branch_ds_tip[2:9]), breaks = 1000, xlim = c(0,500))
+hist(rowSums(branch_ds_tip_filtr30[2:9]), breaks = 500, xlim = c(0,1))
+
+hist(branch_ds_tip[,2], breaks = 2000, xlim = c(0,5))
+
+#filter dnds
+branch_dnds_filtr30 <- branch_dnds_tip[branch_dnds_tip$GeneID %in% branch_ds_tip_filtr30$GeneID, ]
+
+#filter dnds < 10 across branches
+branch_dnds_filtr30_10 <- branch_dnds_filtr30[rowSums(branch_dnds_filtr30[2:9]) < 10,]
+
+#filter dN
+branch_dn_tip <- read.table("data/result_branch_dn_clean_tip.csv", header = T)
+
+branch_dn_filtr30 <- branch_dn_tip[branch_dn_tip$GeneID %in% branch_ds_tip_filtr30$GeneID, ]
+
+#long
+#data_long <- gather(olddata_wide, condition, measurement, control:cond2, factor_key=TRUE)
+branch_dnds_long <- gather(branch_dnds_filtr30_10, key = branch, value = dnds, -GeneID)
+
+branch_ds_long <- gather(branch_ds_tip_filtr30, key = branch, value = ds, -GeneID)
+
+branch_dn_long <- gather(branch_dn_filtr30, key = branch, value = dn, -GeneID)
+
+branch_paml_long <- inner_join(inner_join(branch_dn_long, branch_ds_long), branch_dnds_long)
+
+branch_paml_long <- branch_paml_long[!is.na(branch_paml_long$dn), ]
+
+#filter ds < 0.01
+branch_paml_long <- branch_paml_long[branch_paml_long$ds > 0.01, ]
+
+
+length(unique(branch_paml_long$GeneID))
+
+#keep only genes present in all species
+gene_list <- 
+branch_paml_long %>%
+dplyr::count(GeneID) %>%
+  filter(n==8) %>%
+  select(GeneID)
+
+branch_paml_long <- branch_paml_long[branch_paml_long$GeneID %in% gene_list$GeneID,]
+
+branch_paml_long$branch <- as.factor(branch_paml_long$branch)
+branch_paml_long$GeneID <- as.factor(branch_paml_long$GeneID)
+
+length(unique(branch_paml_long$GeneID))
+#2696 genes
+
+branch_paml_long$branch <- as.factor(branch_paml_long$branch)
+#change order
+levels(branch_paml_long$branch)
+#[1] "B_mori"      "C_cecrops"   "D_plexippus" "H_melpomene" "L_accius"    "L_sinapis"   "P_machaon"   "P_sennae"   
+#reassign
+levels(branch_paml_long$branch) <- c("B. mori", "C. cecrops", "D. plexippus", "H. melpomene", "L. accius", "L. sinapis", "P. machaon", "P. sennae")
+
+#reorder
+branch_paml_long$branch <- factor(branch_paml_long$branch, levels=c("B. mori","P. machaon", "L. accius", "L. sinapis", "P. sennae", "C. cecrops", "D. plexippus", "H. melpomene"))
+
+summary_branch <- 
+branch_paml_long %>%
+  group_by(branch) %>%
+  dplyr::summarise(dnds=mean(dnds_paml), dnds_sd=sd(dnds_paml), dn=mean(dn_paml), dn_sd=sd(dn_paml), ds=mean(ds_paml), ds_sd=sd(ds_paml))
+    #mutate(across(-branch, num, digits = 3, notation = "sci"))
+
+subst_type_gccons_tot <- read.table(file = "../08_subst_type/08_03_subst_type_R/data/subst_type_gccons_tot_gccontent.table", sep = " ")
+
+summary_branch_mapNH <- 
+subst_type_gccons_tot %>%
+  filter(type %in% "all") %>%
+  group_by(branch) %>%
+  dplyr::summarise(dnds_mapNH=mean(dnds), dnds_sd_mapNH=sd(dnds), dn_mapNH=mean(dn), dn_sd_mapNH=sd(dn), ds_mapNH=mean(ds), ds_sd_mapNH=sd(ds)) 
+
+tab_df(as.data.frame(summary_branch), file = "Result_tables/summary_branch_paml.html", digits = 6)
+tab_df(as.data.frame(summary_branch_mapNH), file = "Result_tables/summary_branch_mapNH.html", digits = 6)
+
+#manually improv in xl
+
+
+
+
+```
+
+#Analysing the branch data
+Are there any differences in evolutionary rate between the branches?
+
+dnds is a continuous variable with distribution 0 - > ∞
+This suggests a gamma distribution (the distribution of the dnds-value is also respresenting a gamma distr. )
+
+```{r test_diff_paml}
+
+
+
+mod_gamma <- glmer(dnds~branch + (1|GeneID), data = branch_paml_long, family = Gamma(link = "log"))
+glmer(dnds~branch + (1|GeneID), data = branch_paml_long[branch_paml_long$branch!="B_mori",], family = Gamma(link = "log"))
+
+plot_models(mod_gamma, mod_mapnh_dnds) + theme_pubr()
+
+mod_gene_gamma <- glmer(dnds~(1|GeneID), data = branch_paml_long, family = Gamma(link = "log"))
+
+fixef(mod_gamma)
+plot(mod_gamma)
+qqplot(residuals(mod_gamma))
+
+
+mod_gamma_dn <- glmer(dn~branch + (1|GeneID), data = branch_paml_long, family = Gamma(link = "log"))
+
+mod_gamma_ds <- glmer(ds~branch + (1|GeneID), data = branch_paml_long, family = Gamma(link = "log"))
+
+tab_model(mod_gamma, mod_gamma_dn, mod_gamma_ds, 
+          collapse.ci = TRUE, 
+          p.style     = "numeric_stars")
+
+tab_model(mod_gamma)
+tab_model(glmer(dnds~branch + (1|GeneID), data = branch_paml_long[branch_paml_long$branch!="B. mori",], family = Gamma(link = "log")))
+
+
+aggregate(dnds~branch, mean, data = branch_paml_long)
+
+
+#check mapNH
+
+subst_type_gccons_tot$branch <- as.factor(subst_type_gccons_tot$branch)
+#change order
+levels(subst_type_gccons_tot$branch)
+#[1] "B_mori"      "C_cecrops"   "D_plexippus" "H_melpomene" "L_accius"    "L_sinapis"   "P_machaon"   "P_sennae"   
+#reassign
+levels(subst_type_gccons_tot$branch) <- c("B. mori", "C. cecrops", "D. plexippus", "H. melpomene", "L. accius", "L. sinapis", "P. machaon", "P. sennae")
+
+#reorder
+subst_type_gccons_tot$branch <- factor(subst_type_gccons_tot$branch, levels=c("B. mori","P. machaon", "L. accius", "L. sinapis", "P. sennae", "C. cecrops", "D. plexippus", "H. melpomene"))
+
+#same genes
+subst_type_gccons_tot_filt <- subst_type_gccons_tot[subst_type_gccons_tot$gene_ID %in% branch_paml_long$GeneID, ]
+
+#difference between branches
+mod_mapnh_dnds <- glmer(dnds~branch + (1|gene_ID), data = subst_type_gccons_tot_filt[subst_type_gccons_tot_filt$type == "all", ], family = Gamma(link = "log"))
+mod_mapnh_dnds_unfilt <- glmer(dnds~branch + (1|gene_ID), data = subst_type_gccons_tot[subst_type_gccons_tot$type == "all", ], family = Gamma(link = "log"))
+
+tab_model(mod_mapnh_dnds)
+tab_model(mod_mapnh_dnds_unfilt)
+
+tab_model(mod_gamma, mod_mapnh_dnds, mod_mapnh_dnds_unfilt, file = "Result_tables/dnds_comp_branches.doc")
+
+plot_models(mod_mapnh_dnds, mod_mapnh_dnds_unfilt)
+
+
+
+mod_dnds <- plot_models(mod_gamma, mod_mapnh_dnds, show.values = TRUE, m.labels = c("PaML, branch-model", "MapNH, branch-model" ), colors = c("sandybrown", "sienna4"))  +
+  scale_y_continuous(limits = c(0,2)) +
+    theme(panel.background = element_rect(fill="white"),
+          axis.line = element_line(colour = "black", size=LINE_SIZE),
+          axis.text.y = element_text(size = TXT_SIZE, colour = "black", face="italic"),
+          axis.text.x = element_text(size = TXT_SIZE, colour = "black"),
+          axis.ticks.x = element_line(size = LINE_SIZE, colour = "black"),
+          axis.ticks.y = element_line(size = LINE_SIZE, colour = "black"),
+          legend.text = element_text(size = TXT_SIZE),
+          legend.title = element_blank(),
+          legend.key = element_blank())
+
+#to set the position of the labels (value.offset does not work)
+mod_dnds$layers[[4]]$aes_params$vjust<-(2)
+mod_dnds$layers[[4]]$aes_params$hjust<-(0.2)
+
+
+
+```
+
+
+```{r plots_branch, echo=FALSE}
+
+#plot distribution dnds per lineage
+#add variable with difference in mean between groups
+branch_dnds_long$diff_group <- "Low"
+branch_dnds_long[branch_dnds_long$branch=="B_mori" | branch_dnds_long$branch=="P_machaon"|branch_dnds_long$branch== "L_accius", ]$diff_group <- "Medium"
+branch_dnds_long[branch_dnds_long$branch=="L_sinapis" | branch_dnds_long$branch=="C_cecrops", ]$diff_group <- "High"
+
+branches_dnds <- 
+ggplot(branch_dnds_long, 
+       aes(x = branch, y = dnds)) +
+  #geom_violin(aes(fill=diff_group)) +
+  geom_boxplot(aes(fill=diff_group),
+               #width = 0.3,
+               #notch = TRUE, 
+               lwd = 0.4,
+               #fatten = 2,
+               outlier.colour = "#8C888B",
+               outlier.size = 0.4) +
+               #show.legend = FALSE) +
+  ylab(label = expression(log[10]*" ("~omega~")")) +
+  labs(fill = expression("Average "~omega)) +
+  scale_y_continuous(trans = "log10",
+                     n.breaks = 6) +
+  scale_x_discrete(limits = c("B_mori", "P_machaon","L_accius", "L_sinapis", "P_sennae", "C_cecrops", "D_plexippus", "H_melpomene"), 
+                   labels = c("L_accius" = "L. accius", "P_sennae" = "P. sennae", "L_sinapis" = "L. sinapis", "C_cecrops" = "C. cecrops", "D_plexippus" = "D. plexippus", "H_melpomene" = "H. melpomene", "P_machaon" = "P. machaon", "B_mori" = "B. mori")) +
+  scale_colour_manual(values = "#8C888B",
+                      guide = FALSE) +
+  scale_fill_manual(limits = c("High", "Medium","Low"),
+                    values = dnds_gradient_col) +
+  theme(panel.background = element_blank(),
+        axis.line = element_line(size = LINE_SIZE, colour = "black"),
+        axis.ticks = element_line(size = LINE_SIZE, colour = "black"),
+        axis.text.x = element_text(angle = 45, size = TXT_SIZE, face = "italic", hjust = 1, colour = "black"),
+        axis.title.x = element_blank(),
+        axis.text.y = element_text(size = TXT_SIZE, colour = "black"),
+        axis.title.y = element_text(size = TXT_SIZE, colour = "black"),
+        legend.text = element_text(size = TXT_SIZE, colour = "black"),
+        legend.title = element_text(size = TXT_SIZE, colour = "black"),
+        legend.key = element_blank()  )
+
+ggsave("Figure_ms/dnds_branches_box_green.pdf", device = "pdf", width = 8, height = 5)  
+ggsave("Figure_ms/dnds_branches_box_green.jpg", device = "pdf", width = 8, height = 5)  
+
+ggsave(
+  ggarrange(mod_dnds, branches_dnds, labels = "auto"),
+  device = "pdf",
+  height = 6, width = 18,
+  filename = "Figure_ms/Suppl_2_diff_br.pdf")
+  
+
+```
+
+```{r corr_paml_mapnh}
+
+colnames(branch_paml_long) <- c("gene_ID", "branch", "dn_paml", "ds_paml", "dnds_paml")
+
+paml_mapnh <- inner_join(subst_type_gccons_tot, branch_paml_long)
+
+paml_mapnh$branch <- as.factor(paml_mapnh$branch)
+
+
+length(unique(paml_mapnh[,1]))
+length(unique(subst_type_gccons_tot[,1]))
+
+
+paml_mapnh %>%
+  filter(type %in% "all") %>%
+ggplot(aes(ds_paml, ds)) +
+  geom_point() +
+  stat_cor(method = "spearman") +
+  scale_y_continuous(limits = c(0,1)) +
+  scale_x_continuous(limits = c(0,5)) +
+  facet_wrap(~branch)
+
+paml_mapnh %>%
+  filter(type %in% "all") %>%
+ggplot(aes(dn_paml, dn)) +
+  geom_point() +
+  stat_cor(method = "spearman") +
+  scale_y_continuous(limits = c(0,0.8)) +
+  scale_x_continuous(limits = c(0,0.8)) +
+  facet_wrap(~branch)
+  
+paml_mapnh %>%
+  filter(type %in% "all") %>%
+ggplot() +
+  geom_histogram(aes(dn/dn_paml), binwidth = 0.1) +
+  scale_x_continuous(limits = c(0,5)) +
+  facet_wrap(~branch)
+
+paml_mapnh %>%
+  filter(type %in% "all") %>%
+ggplot() +
+  geom_histogram(aes(ds_paml/ds), binwidth = 0.1) +
+  scale_x_continuous(limits = c(0,5)) +
+  facet_wrap(~branch)
+
+paml_mapnh %>%
+  filter(type %in% "all") %>%
+ggplot(aes(dnds_paml, dnds)) +
+  geom_point() +
+  stat_cor(method = "spearman") +
+  scale_y_continuous(limits = c(0,0.8)) +
+  scale_x_continuous(limits = c(0,0.8)) +
+  facet_wrap(~branch)
+
+
+
+
+```
