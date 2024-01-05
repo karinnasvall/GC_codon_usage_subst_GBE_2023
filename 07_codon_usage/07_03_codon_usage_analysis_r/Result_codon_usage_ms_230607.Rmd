@@ -16,7 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Codon usage analysis
 
-The reson for perfoming codon usage analysis is to investigate if codon usage bias is presence and if any bias could have an effect on the composition of the coding sequences and if this could influence the estimate of selection and evolutionary rate. 
+The reson for perfoming codon usage analysis is to investigate if codon usage bias is present and if any bias could have an effect on the composition of the coding sequences and if this could influence the estimate of selection and evolutionary rate. 
 
 Four steps
 i) Compare codon usage table per branch - between CDS and the aligned geneset
